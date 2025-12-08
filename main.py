@@ -21,7 +21,7 @@ __version__ = '2.0.0'
 @click.option(
     "--aweme_id",
     help='id video tiktok',
-    callback=lambda _, __, value: match.group(0) if(match := re.match(r"^\d+$", value)) else None
+    callback=lambda _, __, value: match.group(0) if (match := re.match(r"^\d+$", value)) else None
 )
 @click.option(
     "--output",
@@ -31,38 +31,42 @@ __version__ = '2.0.0'
 def main(
     aweme_id: str,
     output: str
-): 
-    if(not aweme_id):
-        raise ValueError('example id : 7418294751977327878')      
-    
-    logger.info(
-        'start scrap comments %s' % aweme_id
-    )
+):
+    if not aweme_id:
+        raise ValueError('example id : 7418294751977327878')
+
+    logger.info('start scrap comments %s' % aweme_id)
 
     comments: Comments = TiktokComment()(
         aweme_id=aweme_id
     )
 
-    if not (
-        os.path.exists(
-            dir := os.path.dirname(output)
-        )
-    ):
-        os.makedirs(dir)
+    # ------------------------------
+    # FIX 1: Normalizar ruta
+    # ------------------------------
+    output_dir = output.rstrip("/\\")  # quitar barras finales
 
-    json.dump(
-        comments.dict,
-        open(
-            (final_path := '%s%s.json' % (output, aweme_id)),
-            'w'
-        ),
-        ensure_ascii=False
-    )
+    # si quedó vacío, usar el nombre base
+    if output_dir == "":
+        output_dir = "data"
 
-    logger.info(
-        'save comments %s on %s' % (aweme_id, final_path)
-    )
+    # crear directorio si no existe
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    # ------------------------------
+    # FIX 2: Crear path final JSON
+    # ------------------------------
+    final_path = os.path.join(output_dir, f"{aweme_id}.json")
+
+    # ------------------------------
+    # FIX 3: Guardar en UTF-8 sin errores
+    # ------------------------------
+    with open(final_path, 'w', encoding='utf-8') as f:
+        json.dump(comments.dict, f, ensure_ascii=False, indent=4)
+
+    logger.info('save comments %s on %s' % (aweme_id, final_path))
 
 
-if(__name__ == '__main__'):
+if __name__ == '__main__':
     main()
