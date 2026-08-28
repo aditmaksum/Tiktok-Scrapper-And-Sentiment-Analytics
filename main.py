@@ -48,6 +48,14 @@ def main(
     max_replies: int,
     output: str
 ) -> None:
+    if size < 1:
+        logger.error('--size must be at least 1, got %d' % size)
+        sys.exit(1)
+
+    if max_replies < 0:
+        logger.error('--max-replies cannot be negative, got %d' % max_replies)
+        sys.exit(1)
+
     video_id: str = parse_aweme_id(aweme_id)
 
     if not video_id:

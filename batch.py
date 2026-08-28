@@ -1,3 +1,4 @@
+import os
 import sys
 import click
 
@@ -69,9 +70,21 @@ def main(
 ) -> None:
     month = month or datetime.now().strftime('%Y-%m')
 
+    # Caps are checked before anything touches the network. A cap of zero
+    # would otherwise scrape nothing, exit 0, and still mark every video done
+    # in the checkpoint, so a corrected rerun would skip them all.
+    if max_comments < 1:
+        logger.error('--max-comments must be at least 1, got %d' % max_comments)
+        sys.exit(1)
+
+    if max_replies < 0:
+        logger.error('--max-replies cannot be negative, got %d' % max_replies)
+        sys.exit(1)
+
     try:
         video_range = _parse_range(video_delay)
         request_range = _parse_range(request_delay)
+        month = _check_month(month)
     except ValueError as error:
         logger.error(str(error))
         sys.exit(1)
@@ -102,11 +115,28 @@ def _parse_range(
     if len(parts) != 2:
         raise ValueError('delay must be given as MIN,MAX - got %r' % value)
 
-    low, high = float(parts[0]), float(parts[1])
+    try:
+        low, high = float(parts[0]), float(parts[1])
+    except ValueError:
+        # Without this the operator gets Python's own "could not convert
+        # string to float" instead of a message naming the flag format.
+        raise ValueError('delay must be two numbers as MIN,MAX - got %r' % value)
+
     if low < 0 or high < low:
         raise ValueError('delay range %r must have 0 <= MIN <= MAX' % value)
 
     return low, high
+
+def _check_month(
+    value: str
+) -> str:
+    """Reject a month label that would write outside the output directory."""
+    if os.sep in value or '/' in value or os.path.pardir in value:
+        raise ValueError(
+            '--month is a folder name, not a path - got %r' % value
+        )
+
+    return value
 
 if __name__ == '__main__':
     main()
