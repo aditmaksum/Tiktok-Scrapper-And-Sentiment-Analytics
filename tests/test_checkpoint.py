@@ -165,3 +165,85 @@ def test_missing_required_column_is_fatal(tmp_path):
 
     with pytest.raises(ScrapeError, match='url_or_id'):
         read_rows(path)
+
+
+# The order-mirror export names the video column id_konten, not url_or_id.
+# Renaming it by hand every month is the kind of step that gets forgotten.
+@pytest.mark.parametrize('column', ['url_or_id', 'id_konten'])
+def test_either_video_column_name_is_accepted(tmp_path, column):
+    path = write_csv(
+        tmp_path,
+        '%s,account_type\n7418294751977327878,affiliate account\n' % column
+    )
+
+    rows, skipped = read_rows(path)
+
+    assert [row.aweme_id for row in rows] == ['7418294751977327878']
+    assert [row.account_type for row in rows] == ['affiliate account']
+    assert skipped == []
+
+
+def test_url_or_id_wins_when_a_csv_carries_both_columns(tmp_path):
+    path = write_csv(
+        tmp_path,
+        'url_or_id,id_konten\n7418294751977327878,7451965166043204882\n'
+    )
+
+    rows, _ = read_rows(path)
+
+    assert [row.aweme_id for row in rows] == ['7418294751977327878']
+
+
+def test_the_error_names_both_accepted_column_names(tmp_path):
+    from tiktokcomment.errors import ScrapeError
+
+    path = write_csv(tmp_path, 'video,tag\n123,abc\n')
+
+    with pytest.raises(ScrapeError) as raised:
+        read_rows(path)
+
+    message = str(raised.value)
+    assert 'url_or_id' in message
+    assert 'id_konten' in message
+    # The operator needs to see what their file actually had.
+    assert 'video' in message
+
+
+# TikTok comments routinely contain newlines, quotes, commas and emoji. If any
+# of those broke the CSV, one comment would become several rows and the
+# analyst's counts would be wrong without anything looking broken.
+def test_csv_survives_newlines_quotes_and_commas_in_a_comment():
+    import csv
+    import io
+
+    from tiktokcomment.runner import flatten, CSV_FIELDS
+
+    text = 'line one\nline two\nwith "quotes", a comma and \U0001f629'
+    data = {
+        'aweme_id': '123',
+        'caption': 'caption, with a comma',
+        'video_url': 'http://example.test',
+        'account_type': 'kol account',
+        'comments': [{
+            'comment_id': 'c1',
+            'username': 'u',
+            'nickname': 'n',
+            'comment': text,
+            'create_time': '2026-01-01T00:00:00',
+            'digg_count': 3,
+            'total_reply': 0,
+            'replies': []
+        }]
+    }
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=CSV_FIELDS)
+    writer.writeheader()
+    for line in flatten(data):
+        writer.writerow(line)
+
+    rows = list(csv.DictReader(io.StringIO(buffer.getvalue())))
+
+    assert len(rows) == 1
+    assert rows[0]['comment'] == text
+    assert rows[0]['caption'] == 'caption, with a comma'
