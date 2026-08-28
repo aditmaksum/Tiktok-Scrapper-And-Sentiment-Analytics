@@ -188,17 +188,39 @@ class Checkpoint:
         self.path: str = path
         self.done: Dict[str, Dict[str, Any]] = {}
 
-        if os.path.exists(path):
-            with open(path, encoding='utf-8') as handle:
-                for line in handle:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry: Dict[str, Any] = json.loads(line)
-                    except ValueError:
-                        continue
-                    self.done[entry.get('aweme_id')] = entry
+        if not os.path.exists(path):
+            return
+
+        dropped: int = 0
+
+        with open(path, encoding='utf-8') as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    entry: Dict[str, Any] = json.loads(line)
+                except ValueError:
+                    dropped += 1
+                    continue
+
+                # A half-written line (power cut, killed mid-append) would
+                # otherwise reach the final output as a record with no
+                # comments field, which breaks whatever reads it next.
+                if not isinstance(entry, dict) \
+                        or not entry.get('aweme_id') \
+                        or not isinstance(entry.get('comments'), list):
+                    dropped += 1
+                    continue
+
+                self.done[entry['aweme_id']] = entry
+
+        if dropped:
+            logger.warning(
+                '%d unreadable line(s) in %s were ignored - those videos will '
+                'be scraped again' % (dropped, path)
+            )
 
     def has(
         self: 'Checkpoint',
