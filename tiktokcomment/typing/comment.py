@@ -14,7 +14,8 @@ class Comment:
         create_time: str,
         avatar: str,
         total_reply: int,
-        replies: Optional[List['Comment']] = []
+        digg_count: Optional[int] = 0,
+        replies: Optional[List['Comment']] = None
     ) -> None:
         self._comment_id: str = comment_id
         self._username: str = username
@@ -26,56 +27,63 @@ class Comment:
             ).strftime("%Y-%m-%dT%H:%M:%S")
         self._avatar: str = avatar
         self._total_reply: int = total_reply
-        self._replies: List['Comment'] = replies
+        self._digg_count: int = digg_count or 0
+        self._replies: List['Comment'] = replies if replies is not None else []
 
     @property
     def comment_id(
         self: 'Comment'
     ) -> str:
         return self._comment_id
-    
+
     @property
     def username(
         self: 'Comment'
     ) -> str:
         return self._username
-    
+
     @property
     def nickname(
         self: 'Comment'
     ) -> str:
         return self._nickname
-    
+
     @property
     def comment(
         self: 'Comment'
     ) -> str:
         return self._comment
-    
+
     @property
     def create_time(
         self: 'Comment'
     ) -> str:
         return self._create_time
-    
+
     @property
     def avatar(
         self: 'Comment'
     ) -> str:
         return self._avatar
-    
+
     @property
     def total_reply(
         self: 'Comment'
     ) -> int:
         return self._total_reply
-    
+
+    @property
+    def digg_count(
+        self: 'Comment'
+    ) -> int:
+        return self._digg_count
+
     @property
     def replies(
         self: 'Comment'
     ) -> List['Comment']:
         return self._replies
-    
+
     @property
     def dict(
         self: 'Comment'
@@ -87,16 +95,17 @@ class Comment:
             'comment': self._comment,
             'create_time': self._create_time,
             'avatar': self._avatar,
+            'digg_count': self._digg_count,
             'total_reply': self._total_reply,
             'replies': [reply.dict for reply in self._replies]
         }
-    
+
     @property
     def json(
         self: 'Comment'
     ) -> str:
-        return json.dumps(self.json)
-    
+        return json.dumps(self.dict, ensure_ascii=False)
+
     def __str__(
         self: 'Comment'
     ) -> str:
