@@ -347,6 +347,10 @@ class TiktokComment:
         """
         self.__first_request = True
 
+        # Counted per video: the running total across a batch would read as
+        # this video's number in the log line below.
+        before_empty: int = self.skipped_empty
+
         collected: Comments = None
         cursor: int = 0
 
@@ -376,10 +380,12 @@ class TiktokComment:
 
         self.__trim(collected)
 
+        blank_here: int = self.skipped_empty - before_empty
+
         logger.info('collected %d comments (incl. replies) for %s%s' % (
             collected.total_collected,
             aweme_id,
-            ', skipped %d blank' % self.skipped_empty if self.skipped_empty else ''
+            ', skipped %d blank' % blank_here if blank_here else ''
         ))
 
         return collected

@@ -158,3 +158,19 @@ def test_caption_is_read_even_from_a_blank_comment():
     result = scraper_with(api).get_all_comments('v')
 
     assert result.caption == 'a caption'
+
+
+def test_the_log_counts_blanks_for_this_video_only():
+    """skipped_empty is a running total; the per-video number is the delta."""
+    api = FakeApi([[raw('1', ''), raw('2', 'real')]])
+    scraper = scraper_with(api)
+
+    scraper.get_all_comments('v')
+    assert scraper.skipped_empty == 1
+
+    # A second video on the same scraper must not inherit the first count.
+    api.pages = [[raw('3', ''), raw('4', ''), raw('5', 'real')]]
+    api.cursors.clear()
+    scraper.get_all_comments('w')
+
+    assert scraper.skipped_empty == 3
