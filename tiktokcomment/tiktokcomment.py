@@ -59,14 +59,15 @@ class TiktokComment:
 
     PAGE_SIZE: int = 50
     MAX_COMMENTS: int = 200
-    MAX_REPLIES: int = 10
+    MAX_REPLIES: int = 5
 
     def __init__(
         self: 'TiktokComment',
         max_comments: Optional[int] = MAX_COMMENTS,
         max_replies: Optional[int] = MAX_REPLIES,
         request_delay: Optional[Tuple[float, float]] = (1.0, 3.0),
-        max_retries: Optional[int] = 3
+        max_retries: Optional[int] = 3,
+        keep_empty: Optional[bool] = False
     ) -> None:
         self.__session: Session = Session()
         self.__session.headers.update({
@@ -77,8 +78,35 @@ class TiktokComment:
         self.max_replies: int = max_replies
         self.request_delay: Tuple[float, float] = request_delay
         self.max_retries: int = max_retries
+        self.keep_empty: bool = keep_empty
         self.aweme_id: str = ''
         self.__first_request: bool = True
+        self.skipped_empty: int = 0
+
+    def __usable(
+        self: 'TiktokComment',
+        raw: Dict[str, Any]
+    ) -> bool:
+        """Whether a raw comment carries anything worth collecting.
+
+        Some comments come back with an empty text and nothing else: no
+        image_list, status 1, not hidden. Probed on 2026-08-28, they are
+        genuinely blank rather than sticker or photo comments, so there is
+        nothing in them to read or to score.
+
+        Dropping them here rather than after parsing means a blank comment
+        never spends a slot of the per-video cap, and its replies are never
+        fetched at all.
+        """
+        if self.keep_empty:
+            return True
+
+        if (raw.get('text') or '').strip():
+            return True
+
+        self.skipped_empty += 1
+
+        return False
 
     def __sleep(
         self: 'TiktokComment'
@@ -235,6 +263,8 @@ class TiktokComment:
             for reply in replies:
                 if collected >= self.max_replies:
                     return
+                if not self.__usable(reply):
+                    continue
                 yield self.__parse_comment(reply, with_replies=False)
                 collected += 1
 
@@ -264,6 +294,9 @@ class TiktokComment:
         )
 
         raw: List[Dict[str, Any]] = data.get('comments') or []
+
+        # Caption is read from the unfiltered page: a blank comment can still
+        # carry the share_info block that names the video.
         caption, video_url = self.__extract_video_info(raw, aweme_id)
 
         return Comments(
@@ -271,10 +304,11 @@ class TiktokComment:
             video_url=video_url,
             comments=[
                 self.__parse_comment(comment, with_replies=with_replies)
-                for comment in raw
+                for comment in raw if self.__usable(comment)
             ],
             has_more=data.get('has_more') or 0,
-            aweme_id=aweme_id
+            aweme_id=aweme_id,
+            page_size=len(raw)
         )
 
     def __extract_video_info(
@@ -332,15 +366,20 @@ class TiktokComment:
             if collected.total_collected >= self.max_comments:
                 break
 
-            if not page.has_more or not page.comments:
+            # page_size counts what the API returned, filtering aside. A page
+            # of nothing but blank comments is empty after filtering but still
+            # has to move the cursor, or the same page comes back forever.
+            if not page.has_more or not page.page_size:
                 break
 
-            cursor += len(page.comments)
+            cursor += page.page_size
 
         self.__trim(collected)
 
-        logger.info('collected %d comments (incl. replies) for %s' % (
-            collected.total_collected, aweme_id
+        logger.info('collected %d comments (incl. replies) for %s%s' % (
+            collected.total_collected,
+            aweme_id,
+            ', skipped %d blank' % self.skipped_empty if self.skipped_empty else ''
         ))
 
         return collected

@@ -11,13 +11,18 @@ class Comments:
         video_url: str,
         comments: List[Comment],
         has_more: int,
-        aweme_id: Optional[str] = None
+        aweme_id: Optional[str] = None,
+        page_size: Optional[int] = None
     ) -> None:
         self._caption: str = caption or ''
         self._video_url: str = video_url or ''
         self._comments: List[Comment] = comments
         self._has_more: int = has_more
         self._aweme_id: str = aweme_id or ''
+        # How many comments the API actually returned, before any were
+        # filtered out. The cursor has to advance by this, not by the number
+        # kept, or a filtered page would be requested again.
+        self._page_size: int = page_size if page_size is not None else len(comments)
 
     @property
     def caption(
@@ -60,6 +65,12 @@ class Comments:
         self: 'Comments'
     ) -> str:
         return self._aweme_id
+
+    @property
+    def page_size(
+        self: 'Comments'
+    ) -> int:
+        return self._page_size
 
     @property
     def total_collected(

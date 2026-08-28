@@ -33,9 +33,14 @@ __version__ = '3.0.0'
 )
 @click.option(
     '--max-replies',
-    default=10,
+    default=5,
     show_default=True,
     help='cap on replies fetched per comment'
+)
+@click.option(
+    '--keep-empty',
+    is_flag=True,
+    help='keep comments whose text is blank (they are dropped by default)'
 )
 @click.option(
     '--output', '-o',
@@ -46,7 +51,8 @@ def main(
     aweme_id: str,
     size: int,
     max_replies: int,
-    output: str
+    output: str,
+    keep_empty: bool
 ) -> None:
     if size < 1:
         logger.error('--size must be at least 1, got %d' % size)
@@ -70,7 +76,8 @@ def main(
     try:
         comments: Comments = TiktokComment(
             max_comments=size,
-            max_replies=max_replies
+            max_replies=max_replies,
+            keep_empty=keep_empty
         )(aweme_id=video_id)
     except ScrapeError as error:
         logger.error(str(error))

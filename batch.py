@@ -37,9 +37,14 @@ __version__ = '3.0.0'
 )
 @click.option(
     '--max-replies',
-    default=10,
+    default=5,
     show_default=True,
     help='cap on replies fetched per comment'
+)
+@click.option(
+    '--keep-empty',
+    is_flag=True,
+    help='keep comments whose text is blank (they are dropped by default)'
 )
 @click.option(
     '--video-delay',
@@ -66,7 +71,8 @@ def main(
     max_replies: int,
     video_delay: str,
     request_delay: str,
-    fresh: bool
+    fresh: bool,
+    keep_empty: bool
 ) -> None:
     month = month or datetime.now().strftime('%Y-%m')
 
@@ -98,7 +104,8 @@ def main(
             max_replies=max_replies,
             video_delay=video_range,
             request_delay=request_range,
-            fresh=fresh
+            fresh=fresh,
+            keep_empty=keep_empty
         )
     except ScrapeError as error:
         # The operator forwards this line to whoever maintains the scraper -

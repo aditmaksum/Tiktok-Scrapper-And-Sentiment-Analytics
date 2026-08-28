@@ -280,7 +280,8 @@ def run_batch(
     max_replies: int,
     video_delay: Tuple[float, float],
     request_delay: Tuple[float, float],
-    fresh: bool
+    fresh: bool,
+    keep_empty: Optional[bool] = False
 ) -> int:
     """Scrape every video in the CSV. Returns the process exit code."""
     rows, skipped = read_rows(input_csv)
@@ -308,7 +309,8 @@ def run_batch(
     scraper: TiktokComment = TiktokComment(
         max_comments=max_comments,
         max_replies=max_replies,
-        request_delay=request_delay
+        request_delay=request_delay,
+        keep_empty=keep_empty
     )
 
     failures: List[str] = []
