@@ -163,3 +163,7 @@ runs/
 
 # Browser session reused by the Playwright fallback (phase 2)
 .tiktok-session.json
+
+# Monthly input exports: real order data, not for version control
+mirror_orderan_aff_tiktok.csv
+*_orderan_*.csv

@@ -13,7 +13,10 @@ from tiktokcomment.tiktokcomment import parse_aweme_id
 from tiktokcomment.typing import Comments
 from tiktokcomment.errors import ScrapeError, BlockedError, SchemaError
 
-REQUIRED_COLUMNS: Tuple[str, ...] = ('url_or_id',)
+# The video column goes by more than one name: url_or_id is what this tool
+# documents, id_konten is what the order-mirror export produces. Accepting
+# both means nobody renames a column by hand every month.
+VIDEO_COLUMNS: Tuple[str, ...] = ('url_or_id', 'id_konten')
 OPTIONAL_COLUMNS: Tuple[str, ...] = ('account_type',)
 
 DEFAULT_ACCOUNT_TYPE: str = 'unknown'
@@ -52,20 +55,28 @@ def read_rows(
     with open(path, newline='', encoding='utf-8-sig') as handle:
         reader: csv.DictReader = csv.DictReader(handle)
 
-        missing: List[str] = [
-            column for column in REQUIRED_COLUMNS
-            if column not in (reader.fieldnames or [])
-        ]
-        if missing:
+        header: List[str] = list(reader.fieldnames or [])
+        video_column: Optional[str] = next(
+            (column for column in VIDEO_COLUMNS if column in header), None
+        )
+
+        if not video_column:
             raise ScrapeError(
-                'input CSV is missing required column(s): %s. Expected header: %s'
-                % (', '.join(missing), ', '.join(REQUIRED_COLUMNS + OPTIONAL_COLUMNS))
+                'input CSV has no video column. Expected one of: %s (plus an '
+                'optional %s). Found: %s'
+                % (
+                    ' or '.join(VIDEO_COLUMNS),
+                    ', '.join(OPTIONAL_COLUMNS),
+                    ', '.join(header) or '(no header)'
+                )
             )
+
+        logger.info('reading video ids from the %r column' % video_column)
 
         seen: set = set()
 
         for line_number, raw in enumerate(reader, start=2):
-            value: str = (raw.get('url_or_id') or '').strip()
+            value: str = (raw.get(video_column) or '').strip()
 
             # Left blank on purpose is fine - losing a video to a missed cell
             # would cost more than an untidy label.
@@ -73,7 +84,7 @@ def read_rows(
 
             if not value:
                 skipped.append(
-                    'line %d: skipped - url_or_id is empty' % line_number
+                    'line %d: skipped - %s is empty' % (line_number, video_column)
                 )
                 continue
 
@@ -97,43 +108,61 @@ def read_rows(
 
     return rows, skipped
 
-def smoke_test(
-    aweme_id: str
-) -> None:
-    """Probe one video with a tiny request before spending hours on a batch.
+SMOKE_TEST_VIDEOS: int = 5
 
-    Raises on any of the failure signatures agreed in the design doc, so a
-    batch never starts against an endpoint that has already stopped working.
+def smoke_test(
+    aweme_ids: List[str]
+) -> None:
+    """Probe a few videos with tiny requests before committing to a batch.
+
+    Several videos rather than one, because a video with its comments turned
+    off is normal: 2 of the 11 videos in the first real batch came back empty
+    with a valid response. Failing on the first one would block a healthy run
+    whenever that video happened to be first in the CSV.
+
+    One empty video proves nothing. Every probe coming back empty is the
+    signal worth stopping for.
     """
-    logger.info('smoke test on %s' % aweme_id)
+    probes: List[str] = aweme_ids[:SMOKE_TEST_VIDEOS]
+
+    logger.info('smoke test on %d video(s)' % len(probes))
 
     probe: TiktokComment = TiktokComment(
         max_comments=3,
         max_replies=0,
-        request_delay=(0.0, 0.0)
+        request_delay=(1.0, 2.0)
     )
 
-    # BlockedError covers non-2xx, empty body, and non-JSON responses.
-    page: Comments = probe.get_comments(
-        aweme_id=aweme_id,
-        size=3,
-        with_replies=False
-    )
-
-    if not page.comments:
-        raise SchemaError(
-            'smoke test returned zero comments for %s - either the video has '
-            'no comments (pick another for the first CSV line) or the response '
-            'shape changed.' % aweme_id
-        )
-
-    # Caption is deliberately not checked here. Measured on 2026-08-28, the
+    # Caption is deliberately not checked. Measured on 2026-08-28, the
     # share_info block came back on only 10 of 16 identical requests, so a
     # missing caption says nothing about whether the endpoint still works.
     # Schema drift is caught by the comment parser instead, which raises
     # SchemaError when a comment has no cid.
+    empty: List[str] = []
 
-    logger.info('smoke test passed (%d comments)' % len(page.comments))
+    for aweme_id in probes:
+        # BlockedError covers non-2xx, empty body, and non-JSON responses,
+        # and is raised straight through: that one really is the endpoint
+        # refusing to answer.
+        page: Comments = probe.get_comments(
+            aweme_id=aweme_id,
+            size=3,
+            with_replies=False
+        )
+
+        if page.comments:
+            logger.info('smoke test passed on %s (%d comments)' % (
+                aweme_id, len(page.comments)
+            ))
+            return
+
+        empty.append(aweme_id)
+
+    raise SchemaError(
+        'smoke test found no comments on any of %d video(s): %s. Either every '
+        'one of them has comments turned off, or the response shape changed.'
+        % (len(empty), ', '.join(empty))
+    )
 
 def flatten(
     data: Dict[str, Any]
@@ -274,7 +303,7 @@ def run_batch(
     if checkpoint.done:
         logger.info('resuming - %d video(s) already done' % len(checkpoint.done))
 
-    smoke_test(rows[0].aweme_id)
+    smoke_test([row.aweme_id for row in rows])
 
     scraper: TiktokComment = TiktokComment(
         max_comments=max_comments,
