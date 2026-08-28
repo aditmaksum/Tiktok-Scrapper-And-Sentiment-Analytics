@@ -208,6 +208,16 @@ Sebelum implementasi mulai: siapkan satu file CSV nyata berisi minimal 5-10 vide
 - Lo pilih opsi paling tahan lama (B+C) walau paling mahal effort, bukan opsi tercepat (A) — nunjukin lo mikir jangka panjang buat kebutuhan bulanan, bukan cuma nyelesain tugas sekali ini doang.
 
 
+## PEMBARUAN PENTING (2026-08-28, sesi kedua)
+
+**Fase 2 dan Fase 3 DIBATALKAN.** Premis kedua-duanya terbukti salah lewat pengujian langsung.
+
+Ringkas: browser sungguhan mendapat hasil yang **persis sama** dengan `requests` polos. Diuji empat klien (requests, Playwright headless, Playwright headed dengan penyamaran automation, dan `fetch()` dari dalam halaman tiktok.com yang sudah dimuat penuh dengan cookie sesi). `comment/list` memberi data ke semuanya; `post/item_list` dan `user/detail` memberi HTTP 200 nol byte ke semuanya. Akses adalah kebijakan server per-endpoint, bukan soal seperti apa kliennya.
+
+Akibatnya: fallback Playwright (Fase 2) tidak memulihkan apa pun ketika dibutuhkan, dan discovery per username (Fase 3) tidak mungkin dilakukan anonim. Pemeringkatan video dipindahkan ke SQL di database order yang datanya sudah dimiliki user.
+
+Seluruh bukti, perbandingan pendekatan, dan keputusannya ada di **[docs/designs/phase-2-and-3-discovery.md](phase-2-and-3-discovery.md)**. Bagian Fase 2 dan Fase 3 di dokumen ini digantikan oleh dokumen tersebut dan dipertahankan hanya sebagai catatan sejarah.
+
 ## Temuan dari Data Nyata (2026-08-28)
 
 Batch pertama terhadap 11 video asli milik brand (export `mirror_orderan_aff_tiktok`) mengubah tiga keputusan. Semuanya tidak mungkin ditemukan lewat satu video sample.
