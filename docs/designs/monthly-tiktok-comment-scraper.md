@@ -156,10 +156,11 @@ Semua open question dari draf sebelumnya sudah dijawab user dan dipindah ke bagi
 
 **Fitur discovery by username (Fase 3):** disetujui secara konsep, wajib lewat Playwright, dikerjakan setelah Fase 1 terbukti jalan. Detail seleksi metrik dibahas saat implementasi.
 
-**Cap komentar per video:** maksimal 200 komentar per video (termasuk reply dihitung total). Reply per komentar dibatasi maksimal 10 (bukan mengikuti pagination penuh tanpa batas seperti kode lama `get_all_replies` yang loop sampai habis) — mencegah satu komentar viral dengan ribuan reply menghabiskan seluruh budget request untuk satu video, penting karena volume 1000 video/bulan membuat efisiensi per-video jadi kritis.
+**Cap komentar per video:** maksimal 200 komentar per video (termasuk reply dihitung total). Reply per komentar dibatasi maksimal 5 (semula 10, diturunkan setelah batch nyata pertama — lihat Temuan dari Data Nyata) (bukan mengikuti pagination penuh tanpa batas seperti kode lama `get_all_replies` yang loop sampai habis) — mencegah satu komentar viral dengan ribuan reply menghabiskan seluruh budget request untuk satu video, penting karena volume 1000 video/bulan membuat efisiensi per-video jadi kritis.
 
 **Format Input Video:** daftar video per bulan dimasukkan lewat **file CSV**:
-- `url_or_id` (**wajib**) — URL TikTok atau ID video. Kosong atau tidak terbaca → baris di-skip dengan pesan jelas, bukan crash diam-diam.
+- Kolom video boleh bernama `url_or_id` **atau** `id_konten` (**salah satu wajib ada**). Export order-mirror milik user memakai `id_konten`, dan meminta rename kolom manual tiap bulan adalah langkah yang pasti terlupa suatu saat.
+- `url_or_id` (**wajib**, atau `id_konten`) — URL TikTok atau ID video. Kosong atau tidak terbaca → baris di-skip dengan pesan jelas, bukan crash diam-diam.
 - `account_type` (**opsional**, default `unknown`) — status akun yang memposting video: `affiliate`, `kol`, atau apa pun yang dipakai tim. Teks bebas, tidak divalidasi.
 
 Keputusan `account_type` opsional diambil sadar: kehilangan satu video karena satu sel Excel terlewat lebih mahal daripada label yang perlu dirapikan belakangan. Label bisa diperbaiki di hasil tanpa scrape ulang.
@@ -205,3 +206,24 @@ Sebelum implementasi mulai: siapkan satu file CSV nyata berisi minimal 5-10 vide
 - Lo langsung ngasih evidence konkret pas ditanya demand ("nentuin campaign dari brand kita sendiri kedepannya") — bukan jawaban generik "biar keren-kerenan aja".
 - Lo secara eksplisit membatasi scope sendiri ("kamu ga usah sampe create kesitu" soal modelling/sentimen) — itu tanda paham batas tanggung jawab sistem, bukan asal nambah fitur.
 - Lo pilih opsi paling tahan lama (B+C) walau paling mahal effort, bukan opsi tercepat (A) — nunjukin lo mikir jangka panjang buat kebutuhan bulanan, bukan cuma nyelesain tugas sekali ini doang.
+
+
+## Temuan dari Data Nyata (2026-08-28)
+
+Batch pertama terhadap 11 video asli milik brand (export `mirror_orderan_aff_tiktok`) mengubah tiga keputusan. Semuanya tidak mungkin ditemukan lewat satu video sample.
+
+**1. Smoke test satu video memblokir batch sehat.** Video pertama di CSV nyata (`7532149368489594117`) mengembalikan nol komentar. Smoke test lama menganggap itu tanda API rusak dan menolak menjalankan seluruh batch. Probe langsung ke 11 video: 9 punya komentar (sampai 1.574), 2 memang nol — respons 302 byte, JSON valid, `total: 0`, yaitu video yang komentarnya dimatikan atau dihapus. Jadi ~18% video normal-normal saja tidak punya komentar, dan peluang salah satunya ada di baris pertama itu tinggi.
+
+Smoke test sekarang memeriksa sampai 5 video dan lolos pada video pertama yang berkomentar. Hanya jika semua probe kosong barulah run dihentikan.
+
+**2. Balasan menelan jatah komentar utama.** Dari 1.497 baris hasil batch pertama: 905 balasan, hanya 592 komentar utama. Kasus paling ekstrem: video `7517948957125807416` punya 1.549 komentar di TikTok tetapi hanya menghasilkan **37 komentar utama** — 163 slot sisanya habis untuk balasan.
+
+Untuk mengukur sentimen publik terhadap produk, komentar utama umumnya lebih bernilai daripada percakapan balas-balasan antar penonton. Default `--max-replies` diturunkan dari 10 menjadi **5**.
+
+**3. Komentar kosong bukan komentar gambar.** Dugaan awal (komentar stiker/foto) **salah** dan sudah diverifikasi lewat probe langsung: komentar berteks kosong mengembalikan `image_list: None`, `status: 1`, `no_show: False`. Benar-benar kosong — nol teks, nol gambar, tidak ada yang bisa dibaca atau diskor.
+
+Karena itu komentar berteks kosong sekarang **dibuang dan tidak memakan jatah cap**. Penyaringan dilakukan sebelum parsing, sehingga balasan milik komentar kosong bahkan tidak ikut ditarik — menghemat request. Komentar beremoji tetap disimpan: emoji adalah teks dan membawa sentimen. Flag `--keep-empty` mengembalikan perilaku lama.
+
+Konsekuensi teknis yang perlu diingat: kursor halaman harus maju sebesar **jumlah komentar yang dikembalikan API**, bukan jumlah yang lolos saringan. Kalau tidak, halaman yang tersaring akan diminta ulang terus-menerus. Ini dijaga oleh tes `test_cursor_advances_by_the_unfiltered_page_size`.
+
+**Catatan cap:** total per video bisa melebihi 200 sedikit (terlihat 201 dan 203). Ini disengaja — sebuah komentar tidak pernah dipisahkan dari balasannya hanya demi angka bulat. Kelebihan maksimal sebesar `--max-replies`.

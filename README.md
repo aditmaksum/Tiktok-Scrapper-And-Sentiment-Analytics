@@ -43,7 +43,16 @@ https://www.tiktok.com/@kol/video/7451234567890123456,kol
 7461234567890123456,
 ```
 
-Only `url_or_id` is required. It accepts a bare id, a full video URL, or a
+The order-mirror export works as-is, no renaming needed:
+
+```csv
+id_konten,account_type
+7532149368489594117,affiliate account
+7512845318480776455,kol account
+```
+
+The video column may be called `url_or_id` or `id_konten`, whichever your export
+produces; one of them is required. It accepts a bare id, a full video URL, or a
 `vt.tiktok.com` short link. A row with an empty or unreadable `url_or_id` is
 skipped and reported at the end of the run; it never aborts the batch.
 Duplicate video ids are skipped.
@@ -78,7 +87,8 @@ re-run never doubles the data.
 | `--output`        | `runs`  | Root directory for run output                            |
 | `--month`         | current | Run label / output folder, `YYYY-MM`                     |
 | `--max-comments`  |  `200`  | Cap per video, replies included                          |
-| `--max-replies`   |   `10`  | Cap on replies fetched per comment                       |
+| `--max-replies`   |    `5`  | Cap on replies fetched per comment                       |
+| `--keep-empty`    |  off    | Keep comments whose text is blank (dropped by default)   |
 | `--video-delay`   |  `7,10` | Random seconds between videos, `MIN,MAX`                 |
 | `--request-delay` |   `1,3` | Random seconds between requests inside one video         |
 | `--fresh`         |  off    | Ignore the checkpoint and scrape every row again         |
@@ -92,14 +102,32 @@ batch runs for hours, so it will sometimes be interrupted.
 
 Use `--fresh` to discard the checkpoint and rescrape everything.
 
+### What gets collected
+
+Each video contributes at most `--max-comments` rows, replies included, with at
+most `--max-replies` replies per comment. The cap can overshoot by a few rows: a
+comment is never separated from its replies to hit the number exactly.
+
+Comments whose text is blank are dropped and do not spend a slot of the cap.
+These are not sticker or photo comments - probed against the live API, they come
+back with an empty text, no `image_list`, status 1 and not hidden. There is
+nothing in them to read or to score. Pass `--keep-empty` to collect them anyway.
+
+Emoji-only comments are kept: an emoji is text and carries sentiment.
+
+Replies are worth watching. On a busy video they can crowd out the top-level
+comments, which is usually where opinions about the product live. In one real
+run a video with 1549 comments yielded only 37 top-level ones under a reply cap
+of 10. Lower `--max-replies` to shift the balance back.
+
 ### Smoke test
 
-Before the batch starts, one small request runs against the first video in the
-CSV. If TikTok has stopped answering, or the response no longer carries the
-fields the parser expects, the run stops immediately with a one-line message
-instead of failing silently hours in. Exit code is `2` for that case.
-
-Put a video you know has comments on the first line of the CSV.
+Before the batch starts, small requests run against up to the first 5 videos in
+the CSV, stopping at the first one that has comments. A video with comments
+turned off is normal, so one quiet video does not block a run; only every probe
+coming back empty does. If TikTok has stopped answering, the run stops
+immediately with a one-line message instead of failing silently hours in. Exit
+code is `2` for that case.
 
 The smoke test deliberately does not check the caption. TikTok returns the
 `share_info` block inconsistently - measured at 10 of 16 identical requests -
@@ -129,7 +157,8 @@ python main.py --aweme_id=7170139292767882522 --size=200 --output=data
 | :------------- | :---: | :-----: | :--------------------------------- |
 | `--aweme_id`   |       |    —    | Video id or URL (required)          |
 | `--size`       |  `-s` |  `200`  | Cap on comments, replies included   |
-| `--max-replies`|       |   `10`  | Cap on replies per comment          |
+| `--max-replies`|       |    `5`  | Cap on replies per comment          |
+| `--keep-empty` |       |  off    | Keep blank-text comments            |
 | `--output`     |  `-o` |  `data` | Output directory                    |
 
 ## Sample Output
