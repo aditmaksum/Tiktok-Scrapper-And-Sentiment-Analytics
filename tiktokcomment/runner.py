@@ -9,7 +9,7 @@ from datetime import datetime
 from loguru import logger
 
 from tiktokcomment import TiktokComment
-from tiktokcomment.tiktokcomment import parse_aweme_id
+from tiktokcomment.tiktokcomment import parse_aweme_id, SHORT_URL_PATTERN
 from tiktokcomment.typing import Comments
 from tiktokcomment.errors import ScrapeError, BlockedError, SchemaError
 
@@ -17,16 +17,45 @@ from tiktokcomment.errors import ScrapeError, BlockedError, SchemaError
 # documents, id_konten is what the order-mirror export produces. Accepting
 # both means nobody renames a column by hand every month.
 VIDEO_COLUMNS: Tuple[str, ...] = ('url_or_id', 'id_konten')
-OPTIONAL_COLUMNS: Tuple[str, ...] = ('account_type',)
+
+# Same dual-name reasoning as VIDEO_COLUMNS: nama_pengguna_kreator is the
+# order-mirror export's column, creator_username is what this tool documents.
+CREATOR_COLUMN: Tuple[str, ...] = ('nama_pengguna_kreator', 'creator_username')
+
+OPTIONAL_COLUMNS: Tuple[str, ...] = ('account_type',) + CREATOR_COLUMN
 
 DEFAULT_ACCOUNT_TYPE: str = 'unknown'
 
+# Above this many videos, a batch without --sample is refused. At the measured
+# 54-123 seconds per video that is somewhere between 7 and 17 hours, which is
+# long enough that starting it by accident costs a day. --all says you meant it.
+MAX_UNSAMPLED_VIDEOS: int = 500
+
 CSV_FIELDS: Tuple[str, ...] = (
-    'account_type', 'aweme_id', 'caption', 'video_url',
+    'account_type', 'aweme_id', 'caption', 'video_url', 'video_author_username',
     'comment_id', 'parent_comment_id', 'is_reply',
     'username', 'nickname', 'comment', 'create_time',
     'digg_count', 'total_reply'
 )
+
+# Excel and LibreOffice execute a cell that opens with one of these as a
+# formula rather than showing it as text.
+FORMULA_PREFIXES: Tuple[str, ...] = ('=', '+', '-', '@')
+
+def safe_cell(
+    value: Any
+) -> Any:
+    """Neutralise a cell a spreadsheet would otherwise run as a formula.
+
+    Comment text comes from strangers on the internet and lands in a CSV the
+    analyst opens in Excel. A comment of "=cmd|' /c calc'!A1" is a live
+    formula there, not a comment. A leading apostrophe makes Excel treat the
+    cell as text; nothing else about the value changes.
+    """
+    if isinstance(value, str) and value.startswith(FORMULA_PREFIXES):
+        return "'" + value
+
+    return value
 
 class Row:
     """One line of the monthly input CSV, already validated."""
@@ -35,22 +64,32 @@ class Row:
         self: 'Row',
         line_number: int,
         aweme_id: str,
-        account_type: str
+        account_type: str,
+        creator_username: str = ''
     ) -> None:
         self.line_number: int = line_number
         self.aweme_id: str = aweme_id
         self.account_type: str = account_type
+        self.creator_username: str = creator_username
 
 def read_rows(
-    path: str
+    path: str,
+    resolve_short_links: Optional[bool] = True
 ) -> Tuple[List[Row], List[str]]:
     """Read the input CSV into rows, keeping the skipped ones as messages.
 
     A bad line never aborts the batch - it is reported at the end so the
     operator knows exactly which lines to fix next month.
+
+    resolve_short_links=False keeps the read offline for the sampler, which
+    scans the whole order mirror at once. Offline, a short link cannot be
+    turned into an id, so the raw value is kept as the row's identity and
+    passed through to the output - batch.py resolves it later, when there
+    are a hundred of them rather than thousands.
     """
     rows: List[Row] = []
     skipped: List[str] = []
+    account_types: Dict[str, str] = {}
 
     with open(path, newline='', encoding='utf-8-sig') as handle:
         reader: csv.DictReader = csv.DictReader(handle)
@@ -73,6 +112,10 @@ def read_rows(
 
         logger.info('reading video ids from the %r column' % video_column)
 
+        creator_column: Optional[str] = next(
+            (column for column in CREATOR_COLUMN if column in header), None
+        )
+
         seen: set = set()
 
         for line_number, raw in enumerate(reader, start=2):
@@ -82,13 +125,29 @@ def read_rows(
             # would cost more than an untidy label.
             account_type: str = (raw.get('account_type') or '').strip() or DEFAULT_ACCOUNT_TYPE
 
+            # No column at all (older CSV) and an empty cell both mean the
+            # same thing here: nothing to auto-exclude by, fall back to the
+            # manual exclude-list.
+            creator_username: str = (
+                (raw.get(creator_column) or '').strip() if creator_column else ''
+            )
+
             if not value:
                 skipped.append(
                     'line %d: skipped - %s is empty' % (line_number, video_column)
                 )
                 continue
 
-            aweme_id: Optional[str] = parse_aweme_id(value)
+            aweme_id: Optional[str] = parse_aweme_id(
+                value, resolve_short_links=resolve_short_links
+            )
+
+            if not aweme_id and not resolve_short_links                     and SHORT_URL_PATTERN.fullmatch(value):
+                # Offline, a short link hides its id. Dropping the row would
+                # quietly remove real videos from the sample, so the raw link
+                # travels on as its own identity.
+                aweme_id = value
+
             if not aweme_id:
                 skipped.append(
                     'line %d: skipped - cannot read a video id from %r'
@@ -97,14 +156,28 @@ def read_rows(
                 continue
 
             if aweme_id in seen:
-                skipped.append(
-                    'line %d: skipped - duplicate of an earlier line (%s)'
-                    % (line_number, aweme_id)
-                )
+                # The order mirror carries one row per order, so the same video
+                # repeats. First row wins, which only matters when the repeats
+                # disagree about account_type - and that is a data problem in
+                # the mirror worth saying out loud, because it moves a video
+                # from one tier to another.
+                if account_types[aweme_id] != account_type:
+                    skipped.append(
+                        'line %d: duplicate of %s carries account_type %r, '
+                        'keeping %r from the earlier line'
+                        % (line_number, aweme_id, account_type,
+                           account_types[aweme_id])
+                    )
+                else:
+                    skipped.append(
+                        'line %d: skipped - duplicate of an earlier line (%s)'
+                        % (line_number, aweme_id)
+                    )
                 continue
 
             seen.add(aweme_id)
-            rows.append(Row(line_number, aweme_id, account_type))
+            account_types[aweme_id] = account_type
+            rows.append(Row(line_number, aweme_id, account_type, creator_username))
 
     return rows, skipped
 
@@ -164,6 +237,25 @@ def smoke_test(
         % (len(empty), ', '.join(empty))
     )
 
+def _creator_appears(
+    data: Comments,
+    creator_username: str
+) -> bool:
+    """Whether creator_username matches any comment or reply on this video.
+
+    Exact, case-sensitive - same rule as the manual exclude-list (FR-02),
+    kept consistent on purpose. Replies are one level deep only, matching
+    what the API itself returns (see typing/comment.py).
+    """
+    for top in data.comments:
+        if top.username == creator_username:
+            return True
+        for reply in top.replies:
+            if reply.username == creator_username:
+                return True
+
+    return False
+
 def flatten(
     data: Dict[str, Any]
 ) -> Iterator[Dict[str, Any]]:
@@ -172,36 +264,45 @@ def flatten(
         'account_type': data.get('account_type', DEFAULT_ACCOUNT_TYPE),
         'aweme_id': data.get('aweme_id', ''),
         'caption': data.get('caption', ''),
-        'video_url': data.get('video_url', '')
+        'video_url': data.get('video_url', ''),
+        'video_author_username': data.get('video_author_username', '')
     }
 
     for comment in data.get('comments') or []:
         yield {
             **shared,
-            'comment_id': comment['comment_id'],
+            **_comment_fields(comment),
             'parent_comment_id': '',
-            'is_reply': 0,
-            'username': comment['username'],
-            'nickname': comment['nickname'],
-            'comment': comment['comment'],
-            'create_time': comment['create_time'],
-            'digg_count': comment['digg_count'],
-            'total_reply': comment['total_reply']
+            'is_reply': 0
         }
 
         for reply in comment.get('replies') or []:
             yield {
                 **shared,
-                'comment_id': reply['comment_id'],
-                'parent_comment_id': comment['comment_id'],
-                'is_reply': 1,
-                'username': reply['username'],
-                'nickname': reply['nickname'],
-                'comment': reply['comment'],
-                'create_time': reply['create_time'],
-                'digg_count': reply['digg_count'],
-                'total_reply': reply['total_reply']
+                **_comment_fields(reply),
+                'parent_comment_id': comment.get('comment_id', ''),
+                'is_reply': 1
             }
+
+def _comment_fields(
+    comment: Dict[str, Any]
+) -> Dict[str, Any]:
+    """The per-comment columns, read so a missing key cannot stop the write.
+
+    A checkpoint written by an older version - or by a run that died
+    mid-append - can hold a comment without every field. Indexing it directly
+    raised KeyError inside _assemble, which lost the whole month's output even
+    though the scraped data itself was safe in the checkpoint.
+    """
+    return {
+        'comment_id': comment.get('comment_id', ''),
+        'username': comment.get('username', ''),
+        'nickname': comment.get('nickname', ''),
+        'comment': comment.get('comment', ''),
+        'create_time': comment.get('create_time', ''),
+        'digg_count': comment.get('digg_count', 0),
+        'total_reply': comment.get('total_reply', 0)
+    }
 
 class Checkpoint:
     """Per-video results appended as they finish, so a run can resume.
@@ -263,7 +364,10 @@ class Checkpoint:
     ) -> None:
         self.done[entry.get('aweme_id')] = entry
 
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        # dirname is empty for a bare filename, and os.makedirs('') raises.
+        directory: str = os.path.dirname(self.path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
         with open(self.path, 'a', encoding='utf-8') as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
@@ -281,9 +385,18 @@ def run_batch(
     video_delay: Tuple[float, float],
     request_delay: Tuple[float, float],
     fresh: bool,
-    keep_empty: Optional[bool] = False
+    keep_empty: Optional[bool] = False,
+    sample: Optional[int] = None,
+    quota: Optional[Tuple[int, int, int]] = None,
+    seed: Optional[int] = None,
+    scrape_all: Optional[bool] = False
 ) -> int:
-    """Scrape every video in the CSV. Returns the process exit code."""
+    """Scrape the videos in the CSV. Returns the process exit code.
+
+    With --sample, the order mirror can be handed straight to this command:
+    the videos are picked by the tier quota first, and the chosen list is
+    written next to the results so the run can be inspected and reproduced.
+    """
     rows, skipped = read_rows(input_csv)
 
     for message in skipped:
@@ -296,6 +409,17 @@ def run_batch(
     run_dir: str = os.path.join(output_dir, month)
     partial_path: str = os.path.join(run_dir, '.partial.jsonl')
 
+    rows = _select_videos(
+        rows=rows,
+        skipped=skipped,
+        input_csv=input_csv,
+        run_dir=run_dir,
+        sample=sample,
+        quota=quota,
+        seed=seed,
+        scrape_all=scrape_all
+    )
+
     if fresh and os.path.exists(partial_path):
         os.remove(partial_path)
         logger.info('--fresh: cleared previous checkpoint')
@@ -304,7 +428,17 @@ def run_batch(
     if checkpoint.done:
         logger.info('resuming - %d video(s) already done' % len(checkpoint.done))
 
-    smoke_test([row.aweme_id for row in rows])
+    pending: List[Row] = [row for row in rows if not checkpoint.has(row.aweme_id)]
+
+    if not pending:
+        # Probing here would spend requests on videos that are already done,
+        # and an empty probe would fail a rerun that has nothing left to do.
+        logger.info('every video is already in the checkpoint - nothing to scrape')
+        for path in _assemble(run_dir, checkpoint):
+            logger.info('wrote %s' % path)
+        return 0
+
+    smoke_test([row.aweme_id for row in pending])
 
     scraper: TiktokComment = TiktokComment(
         max_comments=max_comments,
@@ -360,8 +494,23 @@ def run_batch(
                 % (row.line_number, row.aweme_id)
             )
 
+        if row.creator_username and not _creator_appears(data, row.creator_username):
+            # A hand-typed CSV column, unlike a scraped username, carries no
+            # guarantee it matches anything - a typo here silently defeats
+            # FR-11's auto-exclude with no other signal that it happened.
+            # This is not necessarily wrong: a creator who never replies to
+            # their own comments looks identical, so it is a nudge to check
+            # manually, not proof of a mistake.
+            logger.warning(
+                "%s: creator_username %r never appears among this video's "
+                'comments or replies - check for a typo, or the creator '
+                'simply never comments on their own video'
+                % (row.aweme_id, row.creator_username)
+            )
+
         entry: Dict[str, Any] = data.dict
         entry['account_type'] = row.account_type
+        entry['video_author_username'] = row.creator_username
         entry['scraped_at'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
 
         checkpoint.add(entry)
@@ -382,6 +531,91 @@ def run_batch(
         return 1
 
     return 0
+
+def _select_videos(
+    rows: List[Row],
+    skipped: List[str],
+    input_csv: str,
+    run_dir: str,
+    sample: Optional[int],
+    quota: Optional[Tuple[int, int, int]],
+    seed: Optional[int],
+    scrape_all: Optional[bool]
+) -> List[Row]:
+    """Narrow the input down to the videos this run should actually scrape.
+
+    Imported here rather than at module scope: the sampler reads its CSV
+    through read_rows, so a top-level import in either direction would be a
+    cycle.
+    """
+    from tiktokcomment import sampler
+
+    if not sample:
+        # The guard that would have caught pointing this command at the whole
+        # order mirror: 5049 videos is a three-day run, and nothing about the
+        # command line said so.
+        if len(rows) > MAX_UNSAMPLED_VIDEOS and not scrape_all:
+            raise ScrapeError(
+                '%s holds %d videos, which is about %s of scraping. Pass '
+                '--sample N to scrape a quota-balanced sample of them, or '
+                '--all if you really mean to scrape every one.'
+                % (input_csv, len(rows), sampler.estimate_duration(len(rows)))
+            )
+
+        return rows
+
+    if seed is None:
+        seed = random.SystemRandom().randrange(2 ** 32)
+
+    # An instance, not random.seed(): the global RNG also paces the scraper's
+    # requests, so seeding it globally would tie the sample to that.
+    rng: random.Random = random.Random(seed)
+
+    picked, allocation, available, unfilled = sampler.sample_rows(
+        rows, sample, quota or sampler.DEFAULT_QUOTA, rng
+    )
+
+    logger.info('sampling %d of %d video(s), seed %d' % (
+        len(picked), len(rows), seed
+    ))
+    for tier in sampler.TIER_ORDER:
+        logger.info('%-10s %4d sampled of %d available' % (
+            tier, allocation[tier], available[tier]
+        ))
+
+    if unfilled:
+        logger.warning(
+            '%d slot(s) of the requested %d could not be filled - the input '
+            'does not hold enough videos' % (unfilled, sample)
+        )
+
+    logger.info('this run will take roughly %s' % (
+        sampler.estimate_duration(len(picked))
+    ))
+
+    # Written before a single request goes out, so the run can be inspected
+    # while it is still running and reproduced from the seed afterwards.
+    manifest: Dict[str, Any] = sampler.build_manifest(
+        input_csv=input_csv,
+        size=sample,
+        quota=quota or sampler.DEFAULT_QUOTA,
+        seed=seed,
+        allocation=allocation,
+        available=available,
+        unfilled=unfilled,
+        duplicates=len(skipped),
+        excluded=0,
+        exclude_sources=[],
+        picked=len(picked)
+    )
+
+    csv_path, manifest_path = sampler.write_sample(
+        os.path.join(run_dir, 'sample.csv'), picked, manifest
+    )
+    logger.info('wrote %s' % csv_path)
+    logger.info('wrote %s' % manifest_path)
+
+    return picked
 
 def _assemble(
     run_dir: str,
@@ -407,6 +641,8 @@ def _assemble(
         writer.writeheader()
         for entry in entries:
             for line in flatten(entry):
-                writer.writerow(line)
+                writer.writerow({
+                    field: safe_cell(value) for field, value in line.items()
+                })
 
     return [json_path, csv_path]

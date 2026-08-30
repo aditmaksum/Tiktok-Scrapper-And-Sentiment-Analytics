@@ -32,6 +32,73 @@ source venv/bin/activate  # On Windows use `venv\Scripts\activate`
 pip install -r requirements.txt
 ```
 
+## Picking the month's videos
+
+The order mirror holds one row per order, not per video, so the same video
+repeats hundreds of times and affiliate accounts dominate. `sample.py` turns
+that file into a month's worth of videos worth scraping.
+
+```sh
+# see the split and what it will cost, write nothing
+python sample.py --input=mirror_orderan_aff_tiktok.csv --size=150 --dry-run
+
+# write it, then scrape it
+python sample.py --input=mirror_orderan_aff_tiktok.csv --size=150
+python batch.py --input=runs/2026-08/sample.csv
+```
+
+Videos are grouped into four tiers by the `account_type` column, matched as a
+casefolded substring so `kol account` and `KOL` both land in the same place:
+`kol`, `official`, `affiliate`, and `unknown` for anything else, including
+blank cells.
+
+`--quota` splits the sample between the first three, `50,30,20` by default.
+Affiliate holds a floor rather than taking whatever is left over. Without it, a
+month where KOL and official fill the quota gives affiliate zero rows, and next
+month's affiliate number has nothing to compare against.
+
+A tier that cannot fill its share passes the spare slots down the list, so
+affiliate can end up above 20% when there are not enough KOL videos to go
+round. The manifest records what actually happened.
+
+### Flags
+
+| Flag        | Default | Description                                              |
+| :---------- | :-----: | :------------------------------------------------------- |
+| `--input`   |    —    | Order mirror CSV (required)                              |
+| `--output`  | `runs/YYYY-MM/sample.csv` | Where to write the sample            |
+| `--size`    |  `150`  | How many videos to sample                                |
+| `--quota`   | `50,30,20` | Percent split KOL,OFFICIAL,AFFILIATE, must total 100   |
+| `--seed`    | random  | Reuse a seed to reproduce an earlier sample              |
+| `--exclude` |   none  | Glob of earlier results to skip, e.g. `runs/*/comments.json` |
+| `--dry-run` |   off   | Print the split and the duration estimate, write nothing |
+
+### The manifest
+
+Every run writes `<output>.manifest.json` next to the CSV: the seed, how many
+videos each tier had, how many it contributed, how many duplicate rows were
+dropped, and the estimated batch duration. Three months later, "why was this
+video in September's sample" is answered by reading that file and rerunning
+with the same `--seed`.
+
+### Not sampling the same videos twice
+
+```sh
+python sample.py --input=mirror.csv --size=150 --exclude='runs/*/comments.json'
+```
+
+The exclusion is by what was actually **scraped**, not by what was sampled. A
+video picked last month whose scrape failed has no data yet and deserves
+another turn.
+
+### Where the sample stops being random
+
+If a tier holds fewer videos than its share, the sampler takes all of them, and
+that tier is a census rather than a sample. `--dry-run` shows this: when
+`sampled` equals `available` for a tier, every video in it is going into the
+batch. Lower `--size` if you want the split to hold exactly, or use `--exclude`
+so the next month reaches different videos.
+
 ## Monthly batch (the main workflow)
 
 Put the month's videos in a CSV, then run one command.
@@ -66,6 +133,35 @@ cell would cost more than an untidy label.
 python batch.py --input=videos.csv
 ```
 
+### Feeding it the order mirror directly
+
+The batch takes the mirror itself, and picks the videos with the same tier
+quota `sample.py` uses:
+
+```sh
+python batch.py --input=mirror_orderan_aff_tiktok.csv --sample=100
+```
+
+The chosen videos and their manifest are written to `runs/YYYY-MM/sample.csv`
+and `sample.manifest.json` before a single request goes out, so a run can be
+inspected while it is still going and reproduced later from its seed.
+
+Without `--sample`, an input holding more than 500 videos is refused:
+
+```
+mirror_orderan_aff_tiktok.csv holds 5049 videos, which is about 172h 30m of
+scraping. Pass --sample N to scrape a quota-balanced sample of them, or --all
+if you really mean to scrape every one.
+```
+
+That guard exists because pointing the batch at the whole mirror starts a
+three-day run and nothing on the command line says so. `--all` is the way to
+say you meant it.
+
+`sample.py` is still there for the times you want to see the split, or write a
+list to hand around, before committing the hours: it has `--dry-run` and
+`--exclude`, which the batch flags do not.
+
 Output lands in `runs/YYYY-MM/` as one pair of files for the whole month:
 
 ```
@@ -85,12 +181,16 @@ re-run never doubles the data.
 | :---------------- | :-----: | :------------------------------------------------------ |
 | `--input`         |    —    | Input CSV (required)                                     |
 | `--output`        | `runs`  | Root directory for run output                            |
-| `--month`         | current | Run label / output folder, `YYYY-MM`                     |
+| `--month`         | current | Run label / output folder, `YYYY-MM` (a plain name, not a path or drive) |
 | `--max-comments`  |  `200`  | Cap per video, replies included                          |
 | `--max-replies`   |    `5`  | Cap on replies fetched per comment                       |
 | `--keep-empty`    |  off    | Keep comments whose text is blank (dropped by default)   |
 | `--video-delay`   |  `7,10` | Random seconds between videos, `MIN,MAX`                 |
 | `--request-delay` |   `1,3` | Random seconds between requests inside one video         |
+| `--sample`        |   off   | Scrape a quota-balanced sample of N videos instead of all |
+| `--quota`         | `50,30,20` | Percent split KOL,OFFICIAL,AFFILIATE for `--sample`    |
+| `--seed`          | random  | Reuse a seed to reproduce an earlier `--sample`          |
+| `--all`           |  off    | Scrape every video even when the input is large          |
 | `--fresh`         |  off    | Ignore the checkpoint and scrape every row again         |
 
 ### Resuming a broken run
@@ -114,6 +214,15 @@ back with an empty text, no `image_list`, status 1 and not hidden. There is
 nothing in them to read or to score. Pass `--keep-empty` to collect them anyway.
 
 Emoji-only comments are kept: an emoji is text and carries sentiment.
+
+Paging stops after 40 pages per video, and after 5 pages of replies per
+comment, whatever the caps say. Blank comments do not spend a slot of
+`--max-comments`, so on a video whose pages are mostly blank the cap alone
+would never stop the paging; these limits bound what one video can spend.
+
+`create_time` is written in the local time of the machine that ran the scrape,
+not UTC. Run the monthly batch from the same machine, or the same timezone,
+or the timestamps of two runs cannot be compared directly.
 
 Replies are worth watching. On a busy video they can crowd out the top-level
 comments, which is usually where opinions about the product live. In one real

@@ -6,6 +6,7 @@ from datetime import datetime
 from loguru import logger
 
 from tiktokcomment.runner import run_batch
+from tiktokcomment.sampler import parse_quota, DEFAULT_QUOTA
 from tiktokcomment.errors import ScrapeError
 
 __title__ = 'TikTok Comment Scrapper - monthly batch'
@@ -17,7 +18,8 @@ __version__ = '3.0.0'
     '--input', 'input_csv',
     required=True,
     type=click.Path(exists=True, dir_okay=False),
-    help='CSV with the column url_or_id, and optionally account_type'
+    help='CSV with the column url_or_id (or id_konten), and optionally '
+         'account_type and nama_pengguna_kreator (or creator_username)'
 )
 @click.option(
     '--output', 'output_dir',
@@ -59,6 +61,29 @@ __version__ = '3.0.0'
     help='seconds to wait between requests inside one video, as MIN,MAX'
 )
 @click.option(
+    '--sample',
+    default=None,
+    type=int,
+    help='scrape a quota-balanced sample of this many videos instead of all of them'
+)
+@click.option(
+    '--quota',
+    default=','.join(str(percent) for percent in DEFAULT_QUOTA),
+    show_default=True,
+    help='percent split as KOL,OFFICIAL,AFFILIATE for --sample - must add up to 100'
+)
+@click.option(
+    '--seed',
+    default=None,
+    type=int,
+    help='reuse a seed to reproduce an earlier --sample selection'
+)
+@click.option(
+    '--all', 'scrape_all',
+    is_flag=True,
+    help='scrape every video even when the input is large (skips the size guard)'
+)
+@click.option(
     '--fresh',
     is_flag=True,
     help='ignore the checkpoint and scrape every row again'
@@ -72,7 +97,11 @@ def main(
     video_delay: str,
     request_delay: str,
     fresh: bool,
-    keep_empty: bool
+    keep_empty: bool,
+    sample: int,
+    quota: str,
+    seed: int,
+    scrape_all: bool
 ) -> None:
     month = month or datetime.now().strftime('%Y-%m')
 
@@ -87,10 +116,15 @@ def main(
         logger.error('--max-replies cannot be negative, got %d' % max_replies)
         sys.exit(1)
 
+    if sample is not None and sample < 1:
+        logger.error('--sample must be at least 1, got %d' % sample)
+        sys.exit(1)
+
     try:
         video_range = _parse_range(video_delay)
         request_range = _parse_range(request_delay)
         month = _check_month(month)
+        percentages = parse_quota(quota)
     except ValueError as error:
         logger.error(str(error))
         sys.exit(1)
@@ -105,7 +139,11 @@ def main(
             video_delay=video_range,
             request_delay=request_range,
             fresh=fresh,
-            keep_empty=keep_empty
+            keep_empty=keep_empty,
+            sample=sample,
+            quota=percentages,
+            seed=seed,
+            scrape_all=scrape_all
         )
     except ScrapeError as error:
         # The operator forwards this line to whoever maintains the scraper -
@@ -138,6 +176,14 @@ def _check_month(
     value: str
 ) -> str:
     """Reject a month label that would write outside the output directory."""
+    # A drive label is not caught by the separator check, and os.path.join
+    # drops everything before it: join(r'D:\runs', 'C:') is just 'C:', so the
+    # run would write to the current directory of drive C instead of --output.
+    if os.path.splitdrive(value)[0] or ':' in value:
+        raise ValueError(
+            '--month is a folder name, not a drive or path - got %r' % value
+        )
+
     if os.sep in value or '/' in value or os.path.pardir in value:
         raise ValueError(
             '--month is a folder name, not a path - got %r' % value

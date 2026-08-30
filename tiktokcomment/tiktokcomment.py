@@ -22,7 +22,8 @@ SHORT_URL_PATTERN: re.Pattern = re.compile(
 )
 
 def parse_aweme_id(
-    value: str
+    value: str,
+    resolve_short_links: Optional[bool] = True
 ) -> Optional[str]:
     """Turn a bare id or any TikTok video URL into an aweme_id.
 
@@ -30,21 +31,29 @@ def parse_aweme_id(
     which is the only way to recover the id they hide.
     Returns None when nothing usable is found, so the caller can skip the
     row instead of crashing on it.
+
+    resolve_short_links=False makes the whole function offline. The sampler
+    reads thousands of rows at once, and one HTTP HEAD per short link would
+    mean thousands of requests before a single comment is scraped. Offline,
+    a short link simply yields None and the caller decides what to do with it.
     """
     if not value:
         return None
 
     value = value.strip()
 
-    if SHORT_URL_PATTERN.fullmatch(value):
+    if resolve_short_links and SHORT_URL_PATTERN.fullmatch(value):
         try:
-            response: Response = Session().head(
-                value,
-                allow_redirects=True,
-                timeout=20,
-                headers={'User-Agent': USER_AGENT}
-            )
-            value = response.url
+            # A session per short link would otherwise be left open, and a
+            # monthly CSV can hold hundreds of them.
+            with Session() as session:
+                response: Response = session.head(
+                    value,
+                    allow_redirects=True,
+                    timeout=20,
+                    headers={'User-Agent': USER_AGENT}
+                )
+                value = response.url
         except RequestException as error:
             logger.warning('cannot resolve short url %s (%s)' % (value, error))
             return None
@@ -60,6 +69,13 @@ class TiktokComment:
     PAGE_SIZE: int = 50
     MAX_COMMENTS: int = 200
     MAX_REPLIES: int = 5
+
+    # Hard stop on paging. The cap counts kept comments only, so a video whose
+    # pages are all blank comments never reaches it and would page for as long
+    # as TikTok keeps saying has_more. These bound the request budget one video
+    # can spend no matter what comes back.
+    MAX_PAGES: int = 40
+    MAX_REPLY_PAGES: int = 5
 
     def __init__(
         self: 'TiktokComment',
@@ -208,6 +224,7 @@ class TiktokComment:
                 'response shape has changed.'
             )
 
+        parsed['create_time'] = self.__read_create_time(parsed)
         parsed['username'] = parsed.get('username') or ''
         parsed['nickname'] = parsed.get('nickname') or ''
         parsed['comment'] = parsed.get('comment') or ''
@@ -229,6 +246,29 @@ class TiktokComment:
 
         return comment
 
+    def __read_create_time(
+        self: 'TiktokComment',
+        parsed: Dict[str, Any]
+    ) -> int:
+        """create_time as a usable epoch, or SchemaError.
+
+        Without this a missing or non-numeric create_time reaches
+        datetime.fromtimestamp and raises TypeError, which run_batch does not
+        catch: the batch dies mid-run and the month is never assembled.
+        SchemaError is the same shape drift the parser already reports for a
+        missing cid, and it costs one video instead of the whole run.
+        """
+        value: Any = parsed.get('create_time')
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise SchemaError(
+                'comment %s has an unusable "create_time" (%r) - the TikTok '
+                'response shape has changed.'
+                % (parsed.get('comment_id'), value)
+            )
+
     def get_replies(
         self: 'TiktokComment',
         comment_id: str
@@ -241,8 +281,17 @@ class TiktokComment:
         """
         collected: int = 0
         cursor: int = 0
+        pages: int = 0
 
         while collected < self.max_replies:
+            if pages >= self.MAX_REPLY_PAGES:
+                logger.warning(
+                    'stopped reading replies for %s after %d page(s) - kept %d'
+                    % (comment_id, pages, collected)
+                )
+                return
+
+            pages += 1
             size: int = min(self.PAGE_SIZE, self.max_replies - collected)
 
             data: Dict[str, Any] = self.__get(
@@ -353,8 +402,18 @@ class TiktokComment:
 
         collected: Comments = None
         cursor: int = 0
+        pages: int = 0
 
         while True:
+            if pages >= self.MAX_PAGES:
+                logger.warning(
+                    'stopped paging %s after %d page(s) - kept %d comment(s)'
+                    % (aweme_id, pages, collected.total_collected if collected else 0)
+                )
+                break
+
+            pages += 1
+
             page: Comments = self.get_comments(
                 aweme_id=aweme_id,
                 size=self.PAGE_SIZE,

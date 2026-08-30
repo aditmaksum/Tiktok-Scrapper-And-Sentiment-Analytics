@@ -167,3 +167,10 @@ runs/
 # Monthly input exports: real order data, not for version control
 mirror_orderan_aff_tiktok.csv
 *_orderan_*.csv
+
+# Monthly video samples carry internal content ids from the order mirror.
+# runs/ already covers the default output path; these cover the older habit of
+# writing the list to the repo root. videos.example.csv stays tracked.
+videos-*.csv
+*-sample.csv
+*.manifest.json

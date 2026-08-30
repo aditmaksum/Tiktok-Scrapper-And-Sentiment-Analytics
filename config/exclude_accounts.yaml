@@ -1,0 +1,13 @@
+# Manual exclude-list (FR-02) - accounts whose comments/replies are never
+# counted in sentiment/keyword analysis. This does NOT need the video
+# uploader's own account (FR-11 excludes that automatically from the CSV's
+# nama_pengguna_kreator column) - this list is for OTHER staff/admin/support
+# accounts that reply but did not upload the video.
+#
+# Starting candidates found in the sample data (PRD.md §9) - confirm these
+# are all internal accounts, and add any others found via the transparency
+# report (FR-10) before trusting a run's results.
+accounts:
+  - dokterrizkimrd
+  - yayleindonesia
+  - yaylesupport
