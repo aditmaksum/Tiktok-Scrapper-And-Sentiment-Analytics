@@ -22,15 +22,34 @@ Deferred from the 2026-09-02 `/autoplan` review of
 `docs/plans/2026-09-02-insight-driven-report.md`. Each was surfaced, considered,
 and consciously left out of that plan's scope.
 
-- **Per-tier narrative and theme breakdown (KOL / Official / Affiliate).** P3.
-  `html_builder._tier_breakdown` (:144-191) already computes per-tier sentiment,
-  keywords, and themes using the same `classify_tier` the sampler and batch
-  runner use, so the data is there and only the interpretation is missing. The
-  operator's real question is usually "which tier is the problem", not "what is
-  the aggregate". Deferred because reconciling the existing tier taxonomy with
-  the plan's LLM-proposed theme taxonomy is its own design question, and because
-  it multiplies the narrative LLM cost by the tier count. Blocked on the base
-  narrative layer shipping first. Effort: M (human) -> S (CC).
+- ~~**Per-tier narrative and theme breakdown (KOL / Official / Affiliate).**~~
+  **DONE, fix pass 2026-09-02c.** Shipped as the `#tipe-akun` deep-dive section
+  (`insights._build_tier_deep_dive`, `html_builder._tier_deep_dive`,
+  `report.html.j2`'s new section 02) — per-type video/comment counts,
+  sentiment composition, net sentiment, dominant themes, distinctive
+  keywords, masked example comments, and a 1-2 sentence narrative comparing
+  each tier to the others. The video leaderboard remains un-tiered (still not
+  bundled — genuinely separate aggregation work, see below if ever revisited).
+
+- **Theme-primary cross-tier rollup (TD-7, deferred from fix pass
+  2026-09-02c).** P3. The CEO review voice on 2026-09-02c argued the
+  tier-primary deep dive (shipped above) buries the actually-valuable signal
+  (which complaint/theme categories matter most) inside a grouping dimension
+  that may not carry a distinct voice, and proposed a theme-primary
+  reframing instead: a cross-tier "top complaint categories" view as the
+  primary artifact, with tier as a secondary filter. Downgraded to a Taste
+  Decision at the time (single review voice, no second independent voice to
+  confirm the reframing, and the user's verbatim spec asked for tier-primary
+  specifically) rather than acted on. **Now checkable against real numbers**
+  (this batch's actual output, `runs/2026-08/report.html`): kol net +23.0
+  (3,621 comments/61 videos), affiliate net +26.8 (2,798/460), official net
+  +19.6 (2,056/54) — the three tiers' net-sentiment spread is under 8 points
+  and their top themes (usia & kelayakan, dosis & cara pakai) overlap
+  heavily, which is a weak signal that a tier-primary view is hiding much
+  tier-specific divergence on this dataset. Worth revisiting with an
+  `/office-hours` pass on whether the theme-primary reframing is still
+  wanted now that this concrete evidence exists, rather than re-arguing it
+  in the abstract. Effort: unestimated pending that decision.
 
 - **Flat CSV export from `analyze`.** P2. One additional output file,
   `comments_flat.csv`, one row per comment with the 14 scalar fields already

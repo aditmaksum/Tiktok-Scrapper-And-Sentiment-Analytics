@@ -1,7 +1,7 @@
 import pytest
 
 from sosmed_sentiment.errors import ReportBuildError
-from sosmed_sentiment.report.html_builder import _mask_username, build_report
+from sosmed_sentiment.report.html_builder import _mask_username, build_report, build_tier_summary
 
 
 def valid_result(total_analyzed=2, comments=None):
@@ -85,3 +85,84 @@ def test_transparency_section_is_omitted_when_empty():
     html = build_report(valid_result())
 
     assert 'Transparansi Data' not in html
+
+
+def test_scorecard_section_is_omitted_when_there_are_no_comments():
+    """FT-1: _tier_breakdown()/`_overall_summary()`'s by_tier never return
+    None (classify_tier('') resolves to 'unknown', confirmed by reading
+    tiktokcomment/sampler.py:39-56) - they return an empty list only when
+    there are genuinely zero comments to classify. That's the one case the
+    {% if %} guard must actually catch, matching the excluded_accounts_detected
+    pattern: an absent section, not a table with headers and zero rows."""
+    html = build_report(valid_result(total_analyzed=0, comments=[]))
+
+    assert 'Siapa yang berbicara' not in html
+
+
+def test_scorecard_section_falls_back_to_unknown_tier_without_account_type_map():
+    """Without an account_type_map, every comment classifies as tier
+    'unknown' (classify_tier('') -> 'unknown', never None) - the scorecard
+    still renders, with a single 'Unknown' row, rather than being omitted."""
+    html = build_report(valid_result())
+
+    assert 'Siapa yang berbicara' in html
+    assert 'Unknown' in html
+
+
+def test_scorecard_section_renders_when_account_type_map_present():
+    data = valid_result(comments=[
+        {
+            'username': 'user1', 'sentiment_label': 'positif', 'text_raw': 'bagus',
+            'video_id': 'v1', 'is_reply': False
+        },
+        {
+            'username': 'user2', 'sentiment_label': 'negatif', 'text_raw': 'jelek',
+            'video_id': 'v1', 'is_reply': True
+        }
+    ])
+
+    html = build_report(data, account_type_map={'v1': 'kol'})
+
+    assert 'Siapa yang berbicara' in html
+    assert 'Per tipe akun' in html
+    assert 'KOL' in html
+
+
+def test_tier_breakdown_includes_a_genuinely_empty_tier_as_a_zero_row():
+    """CRITICAL regression (T-ENG-6/D8): with an account_type_map that only
+    ever resolves to 'kol', 'official'/'affiliate'/'unknown' still must
+    appear in build_tier_summary()'s result as zero-value rows - the
+    pre-fix `if not group: continue` skip would have silently dropped them.
+    """
+    data = valid_result(comments=[
+        {
+            'username': 'user1', 'sentiment_label': 'positif', 'text_raw': 'bagus',
+            'video_id': 'v1', 'is_reply': False
+        }
+    ])
+
+    rows = build_tier_summary(data, account_type_map={'v1': 'kol account'})
+    tiers_present = {row['tier'] for row in rows}
+
+    assert tiers_present == {'kol', 'official', 'affiliate', 'unknown'}
+    official_row = next(row for row in rows if row['tier'] == 'official')
+    assert official_row['video_count'] == 0
+    assert official_row['comment_count'] == 0
+    assert official_row['net'] == 0.0
+
+
+def test_tier_deep_dive_example_comment_usernames_are_masked():
+    """T-ENG-8: the deep dive's example-comment usernames must route through
+    _mask_username() before render, same as _mask_top_comments() does for
+    the existing top-comments section - a raw username must never appear."""
+    data = valid_result(comments=[
+        {
+            'username': 'unmaskeduser', 'sentiment_label': 'positif', 'text_raw': 'bagus banget',
+            'video_id': 'v1', 'is_reply': False, 'digg_count': 5,
+            'tokens_stemmed': ['bagus', 'banget']
+        }
+    ])
+
+    html = build_report(data, account_type_map={'v1': 'kol account'})
+
+    assert 'unmaskeduser' not in html

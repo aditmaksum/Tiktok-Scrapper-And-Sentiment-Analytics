@@ -3425,3 +3425,1467 @@ except E-T8 and E-T9.
 - TD-2 — Print a single blended net score, given the 22.63-point engine divergence?
 - TD-3 — Accent color: reference brown `#8A5A20` or existing blue `#2454A6`?
 - TD-4 — Explorer default: off (Phase 1) or capped-and-on (Phase 2 design voice)? Cross-voice disagreement.
+
+---
+
+## Fix Pass — 2026-09-02b
+
+Scope: 5 user-agreed fixes on top of the shipped value floor (`insights.py`,
+`charts.py`, `html_builder.py`, `report.html.j2`, `generate_report.py` — all
+uncommitted working-tree changes on `feat/sentiment-model-cascade-and-report-review`,
+on top of commit `06d367f`), plus one scope-inclusion call (per-tier narrative
+breakdown) evaluated for effort/fit only, not built. Run via `/autoplan`
+Phases 0-3 (DX phase out — no developer-facing/CLI/API surface in this batch).
+No code was changed by this review; every fix below is a fully-specified
+Implementation Task for post-gate execution, per plan-eng-review's normal
+"plan only" output mode.
+
+Dual voices: Codex unavailable on this machine
+(`[codex-unavailable: binary not found]`, confirmed in a prior session on this
+repo) — every phase below ran `[subagent-only]`. One independent nested Claude
+subagent per phase (CEO, Design, Eng) read the current code fresh, with no
+prior-phase findings and no access to this write-up, and returned its own
+judgment. Their raw findings are folded into each phase's sections below and
+into the consensus tables (Codex column N/A throughout).
+
+### What already exists (sub-problem -> existing code)
+
+| Sub-problem | Existing code |
+|---|---|
+| Old scorecard numbers (comment/reply split, tier breakdown) | `html_builder._overall_summary()` (:196-232), `_tier_breakdown()` (:146-193) — both computed and already passed into the template render context at `build_report()` :380-381 (`overall_summary=`, `tier_breakdown=`); the template never reads either key |
+| Trend headline | `insights._monthly_trend()` / `_trend_last_delta()`, rendered as `build_narrative()`'s finding #02 into `metrics.narrative.headline`, looped at `report.html.j2:238` |
+| Comment explorer | `insights._explorer_rows()` (:334-382), looped at `report.html.j2:421-428`; filter/search JS at `:441-472` |
+| Explorer hide/show mechanism | `row.hidden = !show` (`report.html.j2:456`) — relies on the UA `[hidden]` rule, which `.explorer-row{display:grid}` (`:130`) silently overrides with no `[hidden]` companion rule |
+| Exclude-list / top-sender transparency | `sosmed_sentiment/filters/exclude_accounts.py` (`apply_exclusions`, `detect_top_accounts`), wired in `analyze.py:158-160`, config at `config/exclude_accounts.yaml`; renders as `excluded_accounts_detected` in `report.html.j2:374-382`, correctly `{% if %}`-gated |
+| Per-tier deferral | Already recorded in `TODOS.md` "sosmed_sentiment — report layer" as P3, "Blocked on the base narrative layer shipping first" — that base layer (this repo's `insights.py`/`html_builder.py`) has now shipped, so the blocking condition is cleared; effort estimate below supersedes the TODOS.md entry's original estimate |
+
+### NOT in scope (this fix pass)
+
+- Building the per-tier narrative breakdown (design sketch + effort estimate only — see Eng section; stays in TODOS.md, effort estimate updated).
+- Anything from the original plan's Phase 4 UNRESOLVED DECISIONS (UC-1/2/4/5/6/7, TD-1/2/3) — those remain open from the 2026-09-02 review and are untouched by this fix pass. TD-3 (accent color) and TD-4 (explorer default-on-capped) are already applied in the current code and are not re-litigated.
+- `Rules.md`, `Architecture.md`, `Schema.md` — no fix here needs them.
+- Any LLM/openai import in `sosmed_sentiment/report/` — all 5 fixes stay inside the deterministic value-floor boundary; confirmed by reading all touched files, no LLM import present or proposed.
+
+---
+
+## Phase 1 — CEO Review
+
+### 0A. Premise challenge
+
+1. **Right problem?** Yes. This is a stakeholder-facing correctness pass on a report about to ship, not new scope — bug fixes on a not-yet-committed diff take priority over expansion. No reframing beats "fix the 5 things the user who will read this report actually flagged."
+2. **Actual outcome vs. proxy.** The real outcome is "a reader can trust every number and every sampled comment in this report." Fix #3 (explorer sample) is the one fix that most directly threatens that outcome if left alone — a "verify it yourself" section that structurally cannot show a positive comment is worse than no explorer section, because it looks like evidence while being cherry-picked by construction (not maliciously, but by an unconditional cap-fill order).
+3. **Do-nothing cost.** Real, not hypothetical: the user already read the current `runs/2026-08/report.html` output and named these 5 issues from the actual render, not from a hypothetical.
+
+### 0B. Existing code leverage
+
+No new code paths are needed for fixes #1, #4, #5 — they wire, style-fix, or verify code that already exists (table above). Fix #2 reuses the existing `headline`/`risk` narrative dict shape (no new data structure). Fix #3 reuses `_explorer_rows()`'s existing likes-sort/RNG-fill machinery, adding a quota stage in front of it. Nothing here is being rebuilt from scratch.
+
+### 0C. Dream state mapping
+
+```
+CURRENT STATE                         THIS FIX PASS                        12-MONTH IDEAL
+Scorecard data computed,     --->     Scorecard rendered; trend      --->  A report that never overclaims
+never rendered. Trend                 headline right-sized to its           what a sample supports, self-
+headline overclaims a thin            evidence; explorer shows a            audits its own sampling bias,
+sample. Explorer is                   real cross-section of all 4           and where every visible metric
+structurally all-negative.            labels; hide-filter actually          traces to a named, tested
+Hide-filter is cosmetically           hides.                                function with a stated floor/cap.
+broken.
+```
+
+Delta: this fix pass moves cleanly toward the ideal — it does not add new debt, it retires four instances of "looks done, isn't" (dead-code render gaps, an overclaiming headline, a structurally biased sample, and a CSS rule that silently no-ops a working JS handler).
+
+### 0C-bis. Implementation alternatives
+
+```
+APPROACH A: Fix in place, minimal diff (RECOMMENDED)
+  Summary: Template-only wiring for #1, narrative dict move for #2, a
+    quota stage in front of existing fill logic for #3, one CSS rule for #4.
+  Effort:  S (human ~2-3h / CC ~20-30 min across all 4 code fixes)
+  Risk:    Low — every fix touches code whose surrounding contract
+    (denominator, RNG determinism, template context shape) is unchanged.
+  Pros:    Smallest diff that fully addresses every named issue; reuses
+    100% of existing helpers; no new files.
+  Cons:    Doesn't address the deeper "video sample vs. true population"
+    uncertainty behind fix #2 (no fix can — that's a data-collection
+    problem, not a rendering one); the per-tier breakdown stays deferred.
+  Reuses:  _overall_summary, _tier_breakdown, build_narrative's dict shape,
+    _explorer_rows's likes/RNG fill, existing {% if %} gating pattern.
+
+APPROACH B: Bundle the per-tier breakdown into this batch
+  Summary: Same 4 fixes, plus build and ship the per-tier narrative
+    repeat now instead of deferring it further.
+  Effort:  M-L (human ~1-2 days / CC ~2-4h, per Eng's estimate below)
+  Risk:    Medium — the video-leaderboard tier aggregation (no existing
+    per-tier video aggregate) is new code, not a reuse of an existing helper.
+  Pros:    Clears a P3 TODOS.md item in the same sitting; "boil the lake"
+    while the report layer is already open.
+  Cons:    Not <1 day CC effort once the video-leaderboard gap is counted
+    (Eng estimate: ~230-370 LOC total); scope creep risk on a batch the
+    user framed as "5 fixes"; blast-radius test (P2) fails on the
+    video-leaderboard piece specifically.
+  Reuses:  Same insights.py helpers for the comment-level tier metrics;
+    nothing for the video leaderboard.
+```
+
+**RECOMMENDATION:** Approach A. Boil-lakes (P2) auto-approves an expansion only
+when it's in blast radius AND under a day of CC effort; the per-tier breakdown
+clears the first test but not cleanly the second once the video-leaderboard
+gap is counted, and it's explicitly framed as an effort-estimate-only item in
+this task, not a build item. Ship the 4 code fixes now; keep the per-tier item
+in TODOS.md with the updated estimate (Taste Decision — surfaced at gate).
+
+### 0D. Mode-specific analysis (SELECTIVE EXPANSION)
+
+Complexity check: 4 code-touching fixes span 4 files (`insights.py`,
+`html_builder.py` unchanged by this batch — see correction below,
+`report.html.j2`, `tests/sosmed_sentiment/report/test_insights.py`) — under
+the 8-file/2-new-class smell threshold. No new classes or services introduced.
+Minimum change set = exactly the 4 fixes; nothing here can be deferred without
+leaving a stakeholder-visible defect live (fix #3 and #4 are both currently
+visibly broken in the rendered output).
+
+Correction from the Eng subagent's independent pass: fix #1 needs one small
+`html_builder.py`-adjacent decision, not zero Python changes — see Eng
+section for the `{% if tier_breakdown %}` guard requirement, which lives in
+the template but must match `_tier_breakdown()`'s actual return contract
+(empty list when no tier data, never `None`, confirmed by reading
+`tiktokcomment/sampler.py:39-56` — `classify_tier('')` resolves to `'unknown'`,
+never raises, never returns `None`).
+
+Expansion scan (cherry-pick candidates, not auto-included):
+- Per-tier narrative breakdown — see Taste Decision below.
+- A shared "balanced quota" helper anticipating that fix #3's quota logic
+  and a future per-tier breakdown will eventually want the same primitive
+  (CEO subagent's observation) — Skip for now (YAGNI until there's a second
+  caller; log as a note in the per-tier TODOS.md entry instead of building
+  an abstraction for one caller).
+
+### 0E. Temporal interrogation
+
+```
+HOUR 1 (foundations):   Decide fix #2's placement (headline vs. risk) before
+                         touching insights.py — this is a data-shape decision
+                         (which narrative list) that the copy and any new test
+                         both depend on. Resolved below as a Taste Decision.
+HOUR 1-2 (core logic):  Fix #3's quota needs a fixed label-iteration order
+                         (CLASSIFIED_LABELS + UNK, never a dict/set) to keep
+                         EXPLORER_RNG_SEED-determinism intact — decide this
+                         now, not mid-implementation (Eng section has the
+                         concrete algorithm).
+HOUR 2 (integration):   Fix #1's template block needs an explicit heading
+                         string and panel layout (Design section has the
+                         concrete copy/layout) — otherwise the implementer
+                         invents UI on the spot.
+HOUR 2-3 (tests):       test_insights.py's
+                         test_explorer_rows_prioritise_negatif_and_unclassified
+                         must be rewritten, not just left failing — Eng
+                         section has the replacement assertion shape.
+```
+
+### 0F. Mode confirmed
+
+SELECTIVE EXPANSION, Approach A. No further scope added beyond the 4 fixes +
+verify-only fix #5; per-tier breakdown surfaces as a Taste Decision at the
+gate, not auto-included.
+
+### CEO Dual Voices
+
+**CLAUDE SUBAGENT (CEO — strategic independence), condensed:** Confirmed all
+code-level premises for fixes #1/#4/#5 by independently reading the files.
+Rated fix #3 **critical**, not medium — "not a sampling bias, it's a
+structurally fabricated impression of the dataset" (1,278 negatif+unclassified
+comments vs. a 150-row cap means positif/netral cannot appear at all, not
+merely underrepresented). Recommended demoting fix #2 to a secondary note
+(option b), rating it **high** severity rather than the task's suggested
+"either is fine" framing, because `_monthly_trend`'s docstring already
+documents a prior overclaiming incident (UC-6, pooled trend hid a reversal) —
+"this module has form for overclaiming trend." Flagged a six-month regret
+scenario: the explorer gets screenshotted into a deck as "representative
+reader sentiment" while being 100% negative by construction. Recommended
+sequencing fix #3 first if only one fix ships this week.
+
+**CODEX SAYS:** `[codex-unavailable: binary not found]` — not run.
+
+```
+CEO DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Premises valid?                   YES     N/A    N/A (subagent-only)
+  2. Right problem to solve?           YES     N/A    N/A (subagent-only)
+  3. Scope calibration correct?        YES     N/A    N/A (subagent-only)
+  4. Alternatives sufficiently explored?YES    N/A    N/A (subagent-only)
+  5. Competitive/market risks covered? YES     N/A    N/A (subagent-only)
+  6. 6-month trajectory sound?         YES     N/A    N/A (subagent-only)
+═══════════════════════════════════════════════════════════════
+Single-model mode: [subagent-only]. Every dimension the subagent rated
+matched or sharpened (never softened) my own primary-voice read above —
+no DISAGREE surfaced, so nothing here escalates past "flag the severity
+upgrades," which are folded into the Eng task list below (fix #3 sequenced
+first; fix #2 severity raised).
+```
+
+### Sections 1-10 (condensed — no section-specific findings beyond what's captured in the audit trail and task list below)
+
+Sections 1 (Vision/Product), 2 (Error & Rescue), 4 (Data model), 5
+(Integration/deployment), 6 (Observability), 7 (Cost), 8 (Team/process), 9
+(Competitive), 10 (Scope creep audit) were run and produced no findings beyond
+what's already captured above — this is a 4-file bug-fix batch with no new
+error paths, no new data model, no deployment change (same CLI entrypoint, same
+`--input`/`--output` contract), no new cost, and no scope creep beyond the
+already-flagged per-tier item. Section 3 (Security/Privacy) — no new attack
+surface: fix #3 changes *which* comments are sampled into the explorer, not
+*how* they're escaped (still routes through the same Jinja autoescape and
+`charts.py`'s `markupsafe.escape`, both unchanged). Section 11 (Design) — see
+Phase 2 below, UI scope confirmed for fixes #1/#2/#3/#4.
+
+**Error & Rescue Registry:** No new errors introduced. Fix #3's quota logic
+must not raise on a zero-count label (e.g., 0 netral comments) — this is
+captured as an explicit edge case in the Eng task, not a new exception type.
+
+**Failure Modes Registry:** | Failure | Trigger | Visible? | Covered by |
+|---|---|---|---|
+| Empty `tier_breakdown`/`overall_summary` renders a broken-looking table | `account_type_map` empty (no `comments.json` found) | Yes, if unguarded | Fix #1 task, `{% if %}` guard |
+| Quota fix under-fills the cap when one label is thin | A label with 0 or few comments | Yes (explorer shows <150 rows) | Fix #3 task, `min(floor, available)` + rollover |
+| Filter chip shows 0 results with no message | User filters explorer to a thin label | Yes (looks broken) | Design section — new empty-state copy required |
+
+### Completion Summary (Phase 1)
+
+Findings: 0 critical blockers to the 4-fix plan; 1 severity upgrade (fix #3:
+medium -> critical framing); 1 taste call surfaced (fix #2 placement); 1
+scope call surfaced (per-tier breakdown, deferred). Auto-decided: 6 (all
+mechanical — see Decision Audit Trail). Taste: 2. User Challenges: 0.
+
+**Phase 1 complete.** Codex: 0 (unavailable). Claude subagent: 1 severity
+upgrade, 0 disagreements with primary voice. Consensus: N/A x6 (subagent-only,
+no DISAGREE). Passing to Phase 2.
+
+---
+
+## Phase 2 — Design Review
+
+UI scope confirmed (Section 11 trigger from Phase 1): fixes #1-#4 all touch
+`report.html.j2` (markup, CSS, or both) or its rendered content. Fix #5 is
+verify-only, no UI change.
+
+### Step 0 (Design Scope)
+
+Completeness of the 5 fixes as specified in the task brief: **6/10** before
+this review, **9/10** after (2 under-specifications closed below — fix #1's
+exact placement/copy, fix #3's empty-filter-result state). No `DESIGN.md`
+exists as a separate file; `DESIGN.md §4` (username masking) is referenced by
+existing code comments and was not touched by this batch (masking already
+applies to `_mask_top_comments`/`_sample_quotes`, unaffected by any of the 5
+fixes). Existing patterns mapped: `.panel`/`.cols2` (compositional data),
+`.kpi` grid (headline single-number stats), `{% if %}`-gated optional
+sections (`excluded_accounts_detected` at `:374`) — all reused below rather
+than inventing new patterns.
+
+### Design Dual Voices
+
+**CLAUDE SUBAGENT (design — independent review), condensed:**
+
+- **Fix #1 placement (medium, under-specified as given):** Put the restored
+  scorecard directly under `.denominator-note` (after `report.html.j2:234`)
+  and before "Temuan utama," as its own `<h3 class="tight">` sub-block inside
+  `#ringkasan` — not a new top-level section, not inline in the `.kpis` grid.
+  The KPI row answers "how good/bad is sentiment"; the scorecard answers "who
+  is talking" — different question, different visual weight class. Use
+  `.cols2` panels (existing pattern), not `.kpi` styling, so readers don't
+  scan it as more headline-metric weight. Recommended heading:
+  `<h3 class="tight">Siapa yang berbicara</h3>`, two `.panel`s side by side —
+  comment-vs-reply as a small `charts.stacked_bar` reuse, tier breakdown as a
+  compact table styled like the existing `#video` leaderboard tables.
+- **Fix #1 redundancy check:** No overlap with the KPI row (sentiment-only)
+  or finding cards. Not duplicative — confirmed safe to add.
+- **Fix #2 (trend caveat vs. demote):** Demote (option b) serves the report's
+  stated intellectual-honesty goal better. A caveat sentence appended to an
+  already-confident bolded headline title ("Bulan X naik... (+N.N poin)")
+  undercuts itself — readers anchor on the bold claim before reading the
+  hedge, so option (a) reads as hedgy without actually lowering the report's
+  implied confidence. Demoting to `#kualitas-data` keeps the number available
+  while correctly not billing it as a validated top-line finding. Needs new,
+  specific Indonesian copy (see task list below) — not left to the
+  implementer to improvise.
+- **Fix #3 empty state (medium-high — correctness bug wearing a design
+  question):** A fixed per-label quota degrading gracefully on a zero-count
+  label is *correct* (a label with 0 comments correctly shows 0 filtered
+  rows) — but the filter UI currently has no message for that state
+  (`#jelajah-count` shows "0 dari N komentar cocok" with a blank
+  `#jelajah-rows` div, which looks broken, not "no data"). Needs an explicit
+  empty-state string inside `#jelajah-rows` when a filter yields 0 rows
+  (e.g., *"Tidak ada komentar {label} dalam sampel ini."*). The existing
+  `.sub` copy at `report.html.j2:404-408` ("seluruh komentar negatif dan tak
+  terklasifikasi diprioritaskan...") is now false once the quota changes and
+  must be rewritten alongside the code, not left stale.
+- **Fix #4 (high, confirmed, isolated):** Grepped the full template — `hidden`
+  appears exactly once (JS, `:456`), `.explorer-row` is the only element
+  toggling it. One-line CSS fix, nothing else to touch.
+- **Fix #5:** Confirmed legitimate, `{% if %}`-gated, no design gap.
+
+**CODEX SAYS:** `[codex-unavailable: binary not found]` — not run.
+
+```
+DESIGN LITMUS SCORECARD — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                              Claude  Codex  Consensus
+  ──────────────────────────────────────── ─────── ─────── ─────────
+  1. Information hierarchy correct?        7/10 -> 9/10 (after fix)  N/A  N/A
+  2. Missing states specified?             2 gaps found & closed     N/A  N/A
+  3. User journey / redundancy risk?       Low, contained            N/A  N/A
+  4. Specificity (no invented UI)?         2 under-specs closed      N/A  N/A
+  5. Accessibility (hidden/filter bug)?    1 confirmed, isolated fix N/A  N/A
+═══════════════════════════════════════════════════════════════
+Single-model mode: [subagent-only]. The subagent's findings sharpened the
+task brief (added the two empty-state/placement specifics folded into the
+task list below) rather than contradicting it — no DISAGREE, so no item
+here rises to a Taste Decision by itself (fix #2's placement choice is
+already a Taste Decision from the CEO phase, reinforced, not created, here).
+```
+
+### Passes 1-7 (condensed)
+
+- **Pass 1 (Information hierarchy):** 9/10 after fix #1's placement is
+  specified (see above). The restored scorecard now has an explicit slot that
+  doesn't compete with the KPI row.
+- **Pass 2 (Missing states):** Two gaps found, both closed: fix #1 needs
+  `{% if tier_breakdown %}`/`{% if overall_summary.by_tier %}` guards (Eng
+  section has the exact condition); fix #3 needs the empty-filter-result
+  message. No other missing states in this batch — loading/error states are
+  N/A (server-rendered, no async fetch in this report).
+  **Note:** `#kualitas-data` currently uses no `{% if %}` guard on the copy
+  text (unconditional `<div class="methodology">`), which is fine as-is
+  (metrics always exist even at 0) — flagged only to confirm it was checked,
+  no action needed.
+- **Pass 3 (User journey):** No emotional-arc break introduced. The report's
+  Indonesian-language, plain-numbers tone is preserved by every proposed copy
+  string above (matched to existing sentence patterns in `build_narrative()`
+  and the template's `.sub`/`.note` copy).
+- **Pass 4 (Specificity):** All 4 UI-touching fixes now carry exact
+  placement, exact CSS selector, or exact copy pattern — no implementer
+  judgment call left open (task list below is fully specified).
+- **Pass 5 (Design system alignment):** Every fix reuses an existing pattern
+  (`.panel`/`.cols2`, `{% if %}` gating, `.chart-stacked-bar`, existing
+  `.tag-*`/`.chip` classes for the explorer) — nothing introduces a new
+  visual language.
+- **Pass 6 (Interaction/keyboard):** Fix #4 is the only interaction fix in
+  this batch; the filter buttons themselves (`<button aria-pressed>`) were
+  already verified keyboard-reachable in the original plan review (Phase 2
+  addendum, prior session) and are unchanged here.
+- **Pass 7 (Responsive/print):** No new breakpoint-sensitive markup. Fix #1's
+  new `.cols2` panels already collapse to 1-column under 820px per the
+  existing `@media (max-width:820px)` rule (`report.html.j2:149-154`) with no
+  changes needed. Fix #3's quota doesn't change row markup, so the existing
+  print rule (`#jelajah-rows{max-height:none;overflow:visible}` under
+  `@media print`) is unaffected.
+
+### Completion Summary (Phase 2)
+
+Findings: 2 under-specifications closed (fix #1 placement/copy, fix #3
+empty-filter-result copy) — both folded into the task list below as required
+copy, not left as open questions. 0 structural design defects beyond what
+Phase 1 already flagged. 0 new Taste Decisions beyond fix #2 (reinforced, not
+duplicated).
+
+**Phase 2 complete.** Codex: 0 (unavailable). Claude subagent: 2 issues (both
+specificity gaps, both closed). Consensus: N/A x5 (subagent-only, no
+DISAGREE). Passing to Phase 3.
+
+---
+
+## Phase 3 — Eng Review
+
+### Architecture (Section 1)
+
+```
+generate_report.py (CLI)
+        |
+        v
+html_builder.build_report()  ---------------------------+
+        |                                                 |
+        v                                                 v
+insights.build_metrics()                    _overall_summary() / _tier_breakdown()
+   |  (comments, per_video)                       (comments, account_type_map)
+   |                                                       |
+   +-> _monthly_trend / _trend_last_delta                  | [FIX #1: already computed,
+   |     -> build_narrative() headline #02                 |  passed to render(), never
+   |        [FIX #2: move to 'risk' list]                  |  read by template — wire in]
+   |                                                       |
+   +-> _explorer_rows()                                    v
+   |     [FIX #3: add per-label quota                template.render(..., overall_summary=,
+   |      stage before existing                              tier_breakdown=, metrics=, ...)
+   |      likes-sort + RNG fill]                                    |
+   |                                                                 v
+   +-> _video_leaderboard() (per_video, NOT                report.html.j2
+         comment-level — relevant only                       [FIX #1: render new block]
+         to the per-tier scope item below,                   [FIX #3: template unchanged —
+         which has no per-tier equivalent)                    consumes metrics.explorer_rows
+                                                                as-is]
+                                                               [FIX #4: CSS-only,
+                                                                .explorer-row[hidden]]
+```
+
+No new components, no new coupling. Fix #1 is a one-directional data flow
+already wired (`html_builder.py` -> template context) with the template as
+the only missing link. Fix #2 moves an existing dict entry between two
+already-rendered template loops (`headline` and `risk`) — zero new coupling.
+Fix #3 adds one stage inside an existing pure function's control flow — no
+new call sites. Fix #4 is presentation-layer only, no data flow change.
+
+### Code Quality (Section 2)
+
+No DRY violations introduced. Fix #3's quota logic should NOT introduce a new
+shared "balanced quota" helper now (per Phase 1's Approach A rejection of
+premature abstraction — YAGNI until there's a second caller); inline it in
+`_explorer_rows()`.
+
+Naming/complexity: `_explorer_rows()` grows by one loop stage (the quota
+draw) — still well under any complexity threshold worth flagging. No renames
+needed elsewhere.
+
+**Eng subagent's independent correction to fix #1's classification:**
+"genuinely template-only for wiring, but not risk-free" — `_tier_breakdown()`
+returns `[]` when `account_type_map` is empty (not `None`; confirmed by
+reading the function and by tracing `classify_tier('')` -> `'unknown'` in
+`tiktokcomment/sampler.py:39-56`, which never raises and never returns
+`None`). The template must guard both new blocks with `{% if %}`, matching
+the existing pattern at `report.html.j2:374` for `excluded_accounts_detected`
+— otherwise an empty list renders a table with headers and zero rows, which
+reads as broken, not "no data."
+
+### Section 3 — Test Review (full, not compressed)
+
+**Test diagram — every codepath in this batch, mapped to coverage:**
+
+| # | Codepath | New/changed? | Test exists? | Gap? | Decision |
+|---|---|---|---|---|---|
+| T1 | `report.html.j2` renders `overall_summary.comment_vs_reply` and `.by_tier` | New render path (data existed, unrendered) | No (no snapshot/HTML-content test for this block) | Yes | Add: extend `test_report_integration.py` to assert the rendered HTML contains the new heading string and a nonzero row count when `account_type_map` is present |
+| T2 | `report.html.j2` with `tier_breakdown == []` / `overall_summary.by_tier == []` (empty `account_type_map`) | New edge case | No | Yes | Add: integration test asserting the new block is absent (not empty-but-rendered) when no `comments.json` account_type_map is supplied — mirrors how `excluded_accounts_detected` is already tested (grep `test_report_integration.py` for that pattern and follow it) |
+| T3 | `build_narrative()` — trend finding lands in `risk` not `headline` (fix #2, option b) | Changed | No (untested territory either way per Eng subagent) | Yes | Add: `test_build_narrative_trend_finding_lands_in_risk_not_headline` asserting `metrics['narrative']['risk']` contains a caveat-titled entry and `headline` does not, when `trend_last_delta` is present |
+| T4 | `_explorer_rows()` — balanced quota, all 4 labels represented when each has >= floor comments | Changed | Existing test contradicts new behavior | Yes — must edit | Rewrite `test_explorer_rows_prioritise_negatif_and_unclassified` (`test_insights.py:155-166`) — see exact replacement below |
+| T5 | `_explorer_rows()` — a label with 0 available comments (e.g. 0 netral) doesn't crash and doesn't reserve dead slots | New edge case | No | Yes | Add: `test_explorer_rows_quota_handles_a_zero_count_label` |
+| T6 | `_explorer_rows()` — RNG determinism preserved after quota stage added | Existing test, must still pass unmodified | Yes — `test_explorer_sampling_uses_a_local_rng_not_the_global_seed`, `test_explorer_sampling_is_deterministic_across_calls` | No — but MUST verify these still pass after the fix (they will, if label iteration order is fixed-tuple, never `dict`/`set` iteration) | Verify, no new test needed |
+| T7 | `test_explorer_rows_are_hard_capped` (`:148-152`) — cap still respected after adding a quota stage | Existing test, must still pass | Yes | No | Verify unchanged |
+| T8 | `.explorer-row[hidden]` CSS rule — filtered rows actually invisible | New CSS rule | No automated test (no JS/CSS test harness in this repo) | Yes, but out of unit-test reach | Manual QA note in task list: regenerate `report.html`, open in a browser, use the filter chips, confirm rows visually disappear — this repo has no headless-browser test infra, so this is a documented manual verification step, not a new automated test |
+| T9 | `detect_top_accounts()` / `apply_exclusions()` (fix #5, verify-only) | Unchanged | Yes — `tests/sosmed_sentiment/filters/test_exclude_accounts.py` | No | No action — existing coverage confirmed sufficient by reading the test file's presence and the function contracts |
+
+**T4 exact replacement** (the current test asserts *all* 10 negatif + 10
+unclassified always win a slot when they fit under cap — that assertion
+becomes false under a floor-then-fill quota where non-priority labels also
+get a guaranteed floor):
+
+```python
+def test_explorer_rows_include_all_four_labels_when_available():
+    """Fix #3 regression: the explorer must not be constructible as 100%
+    negatif/unclassified when positif/netral comments exist in the corpus.
+    """
+    comments = (
+        [_comment('negatif', month='2026-05') for _ in range(1027)]
+        + [_comment('tidak_terklasifikasi', month='2026-05') for _ in range(251)]
+        + [_comment('positif', month='2026-05') for _ in range(500)]
+        + [_comment('netral', month='2026-05') for _ in range(500)]
+    )
+    metrics = insights.build_metrics({'comments': comments})
+    labels = {row['sentiment_label'] for row in metrics['explorer_rows']}
+
+    assert labels == {'positif', 'negatif', 'netral', 'tidak_terklasifikasi'}
+    assert len(metrics['explorer_rows']) == insights.EXPLORER_ROW_CAP
+```
+
+**Eval suites:** N/A — no LLM/prompt changes in this batch (constraint
+confirmed: no `openai`/LLM import in any touched file).
+
+**Test plan artifact:** written to disk at
+`C:\Users\asets\AppData\Local\Temp\claude\c--Users-asets-Documents\4047a7bd-c2ba-4656-bb6e-8c5509cb0eff\scratchpad\2026-09-02b-fix-pass-test-plan.md`
+(the `~/.gstack/projects/<slug>/` artifact path requires `gstack-slug`
+tooling not exercised in this run — the T1-T9 table above is the complete,
+authoritative test plan; the scratchpad copy is a duplicate for the
+gate/record, not a separate source of truth).
+
+### Performance (Section 4)
+
+No N+1s, no new I/O, no new memory pressure. Fix #3's quota stage is a single
+extra pass over an already-in-memory `comments` list (same O(n) shape as the
+existing three-stage fill it sits in front of). Fix #1 adds two Jinja loops
+over already-computed, already-small lists (`by_tier` and `tier_breakdown`
+are both capped at 4 rows by `TIER_ORDER`). No caching concerns.
+
+### Eng Dual Voices
+
+**CLAUDE SUBAGENT (eng — independent review), condensed:** see inline
+corrections folded into Architecture/Code-Quality/Test-Review sections above
+(fix #1's `{% if %}` guard requirement; fix #3's fixed-label-order
+determinism requirement; T4's exact rewrite). Additional finding on the
+per-tier scope item: `insights.py`'s comment-level functions
+(trend/keywords/top-comments/explorer) are genuinely generic over a comment
+list and reusable per-tier with a filter step, **but** `_video_leaderboard()`
+consumes `per_video` (pre-aggregated `sentiment_summary` per video, not raw
+comments) — there is no existing tier-filtered per-video aggregate, so a
+tier-scoped video leaderboard needs new aggregation code, not just a comment
+filter. Estimate: ~150-250 LOC in `insights.py` (a
+`build_metrics_for_tier()` wrapper reusing existing helpers, minus the video
+leaderboard) + ~80-120 LOC template additions (repeat 4x) + new tests ≈
+230-370 LOC total, plus the un-estimated video-leaderboard aggregation piece.
+
+**CODEX SAYS:** `[codex-unavailable: binary not found]` — not run.
+
+```
+ENG DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Architecture sound?               YES     N/A    N/A (subagent-only)
+  2. Test coverage sufficient?         Gaps found & closed (T1-T5) N/A  N/A
+  3. Performance risks addressed?      YES, none found  N/A         N/A
+  4. Security threats covered?         YES, none new    N/A         N/A
+  5. Error paths handled?              1 gap closed (fix #1 guard) N/A  N/A
+  6. Deployment risk manageable?       YES, no deploy change  N/A   N/A
+═══════════════════════════════════════════════════════════════
+Single-model mode: [subagent-only]. No DISAGREE with primary voice; every
+subagent finding sharpened an existing task (folded in above) rather than
+surfacing a new one.
+```
+
+### NOT in scope (Eng)
+
+- The per-tier video-leaderboard aggregation (part of the effort-estimate-only
+  scope item) — no existing code to reuse, genuinely new work, correctly kept
+  out of "what already exists."
+- Any automated CSS/JS visual regression test for fix #4 — this repo has no
+  headless-browser test harness; T8 is documented as a manual verification
+  step instead of a fabricated automated test.
+
+### Completion Summary (Phase 3)
+
+Findings: 5 test gaps (T1, T2, T3, T5, plus T4's required rewrite), all with a
+decided fix (add test / rewrite test / manual step), none deferred without
+rationale. 0 critical architectural gaps. 0 security findings. Per-tier scope
+item: effort estimate delivered (230-370 LOC + un-estimated video-leaderboard
+piece), recommendation is defer (Taste Decision, below).
+
+**Phase 3 complete.** Codex: 0 (unavailable). Claude subagent: 3 corrections
+(fix #1 guard, fix #3 determinism, per-tier video-leaderboard gap), 0
+disagreements with primary voice. Consensus: N/A x6 (subagent-only, no
+DISAGREE). Phase 3 (Eng) complete — DX phase out of scope for this batch
+(confirmed: no CLI flag, API, or developer-facing surface changes in any of
+the 5 fixes). Passing to Phase 4 (Final Gate — handled by the orchestrating
+session).
+
+---
+
+## Fix Pass — Decision Audit Trail
+
+| # | Decision | Type | Principle(s) | Resolution |
+|---|---|---|---|---|
+| D1 | Fix #1 is template-only wiring, needs `{% if %}` guards | Mechanical | P5 (explicit) | Auto-decided: guard both new blocks, matching existing `excluded_accounts_detected` pattern |
+| D2 | Fix #1 placement: new sub-block under `.denominator-note`, before "Temuan utama", `.cols2` panels not `.kpi` grid | Mechanical (design-specified) | P5 | Auto-decided per Design phase's concrete spec |
+| D3 | Fix #2 placement: headline+caveat (a) vs. demote to risk (b) | **Taste** | P1 vs. P5 tension | Recommended: **(b) demote**, all three phases converge — see Taste Decisions below |
+| D4 | Fix #3 quota algorithm: fixed per-label floor + existing likes/RNG fill for remainder | Mechanical | P5, P2 (boil the lake — fix root cause not symptom) | Auto-decided: floor in `CLASSIFIED_LABELS + (UNK,)` fixed tuple order, `min(floor, available)` per label, unused floor capacity rolls into general fill |
+| D5 | Fix #3 requires rewriting `test_explorer_rows_prioritise_negatif_and_unclassified` | Mechanical | P1 (completeness) | Auto-decided: replacement test T4 specified above, exact code given |
+| D6 | Fix #4 CSS fix: one rule, `.explorer-row[hidden]{display:none}` | Mechanical | P5 | Auto-decided, no alternative considered (single obviously-correct fix) |
+| D7 | Fix #5: no code change, verify-only confirmed correct | Mechanical | P4 (DRY — don't build what exists) | Auto-decided: confirmed via `exclude_accounts.py` + `analyze.py` read, no gap found by any of 3 voices |
+| D8 | Per-tier breakdown: build now vs. defer | **Taste** | P2 (boil lakes) vs. P3 (pragmatic effort ceiling) | Recommended: **defer**, update TODOS.md estimate — see Taste Decisions below |
+| D9 | No new shared "balanced quota" helper for fix #3 | Mechanical | P4 (DRY, but YAGNI until 2nd caller exists) | Auto-decided: inline in `_explorer_rows()`, note the future-reuse opportunity in the per-tier TODOS.md entry only |
+| D10 | Fix #3 empty-filter-result state needs new copy | Mechanical (design-specified) | P1 | Auto-decided per Design phase's concrete spec |
+| D11 | Fix #2's demoted-note copy, fix #1's heading copy | Mechanical (design-specified) | P5 | Auto-decided, exact Indonesian strings given in task list below |
+| D12 | Fix #4's visual verification: manual, not fabricated automated test | Mechanical | P5 (explicit over clever — don't fake coverage) | Auto-decided: documented as manual QA step (T8) |
+
+---
+
+## Taste Decisions (surfaced for the gate)
+
+### TD-5 — Fix #2: keep trend headline with a caveat, or demote it out of the headline findings
+
+**Recommendation: (b) demote** — move the trend finding from
+`metrics.narrative.headline` into `metrics.narrative.risk`, with the title
+softened (drop "naik"/"turun" confident framing) and body text disclosing the
+sample-coverage concern.
+
+**Why:** All three independent phases converged on (b) without being shown
+each other's reasoning. CEO: the module has a documented prior overclaiming
+incident (UC-6, pooled trend hid a reversal) — "this module has form."
+Design: a caveat appended to an already-bolded, confident headline title
+undercuts itself — readers anchor on the bold claim, so (a) reads as hedgy
+without functionally lowering perceived confidence. Eng: moving between
+`headline`/`risk` is a zero-cost, already-supported operation (both lists are
+independently rendered), so (b) isn't more expensive than (a).
+
+**Downstream impact of the alternative (a):** Keeping it in `headline` with
+added caveat text costs nothing extra in code, but every reader who only
+skims the "Temuan utama" cards still sees a bolded month-over-month swing as
+a top-3 finding — the caveat sentence is the least-read part of a finding
+card by design (title first, body second, skimmed). If the user's real
+concern is that a stakeholder screenshots this section, (a) does not solve
+that; (b) does, because the demoted note sits under "Kualitas data," a
+section stakeholders check for caveats, not headlines.
+
+**Exact new copy** (insights.py `build_narrative()`, replacing the current
+`trend_delta` block at lines 423-437, target list = `risk` not `headline`):
+
+```
+title: 'Perbandingan bulan-ke-bulan: %s %s dibanding %s (%+.1f poin) — belum diverifikasi terhadap populasi penuh'
+body: 'Sampel video di laporan ini adalah sebagian kecil dari total video akun (~1.000 dari ~100.000). Angka ini adalah sinyal awal dari sampel yang ada, bukan kesimpulan yang divalidasi terhadap seluruh populasi video — gunakan dengan hati-hati untuk keputusan besar.'
+```
+
+(The "~100.000" figure is domain knowledge the user stated in this task's
+brief, not derivable from `analysis_result.json` — it must be a
+caller-supplied constant or CLI flag, not hardcoded in `insights.py`, since
+the true population size differs per account. **Implementation note added to
+the task list below**: this needs a new optional parameter, e.g.
+`total_population_videos: Optional[int]`, threaded from `generate_report.py`
+through `build_report()` into `insights.build_metrics()`, defaulting to
+`None` — when `None`, the copy drops the specific ratio and states the
+caveat generically. This is a small addition to fix #2's scope beyond a pure
+copy/placement change; flagged here so it isn't missed.)
+
+### TD-6 — Per-tier narrative breakdown: build now or keep deferred
+
+**Recommendation: keep deferred**, update the `TODOS.md` entry's effort
+estimate and clear its stale "blocked on" note.
+
+**Why:** Boil-lakes (P2) auto-approves scope expansion only when it's in
+blast radius AND under a day of CC effort. The comment-level metrics
+(trend/keywords/explorer/top-comments) genuinely qualify — reusable in
+~150-250 LOC via `classify_tier()` filtering before existing `insights.py`
+helpers. But the video leaderboard has no existing per-tier aggregate to
+reuse; that piece is new, un-estimated work, which fails the "<1 day CC,
+blast radius" test cleanly enough that all three phases (independently)
+recommended deferring rather than bundling. The user also framed this task as
+"5 fixes," not "5 fixes plus a new report section" — pragmatic (P3) scope
+discipline favors shipping the named fixes first.
+
+**Downstream impact of the alternative (build now):** Gets one TODOS.md P3
+item off the books in the same sitting and gives operators a "which tier is
+the problem" answer immediately — real value. But it roughly doubles this
+batch's diff size, adds a genuinely new aggregation code path
+(tier-scoped video leaderboard) with no existing test pattern to extend, and
+delays shipping the 4 already-broken/under-specified fixes behind a larger
+review cycle. If the operator's next request is specifically "which tier is
+driving the negative sentiment," that's the trigger to build this — not
+before.
+
+**TODOS.md update** (apply after gate approval, not gated on it — pure
+doc edit): replace the "Per-tier narrative and theme breakdown" entry's
+effort line and blocked-on note:
+
+```
+- **Per-tier narrative and theme breakdown (KOL / Official / Affiliate).** P3.
+  [... existing text unchanged through "the aggregate" ...] No longer blocked
+  on the base narrative layer — `insights.py`/`html_builder.py` shipped
+  2026-09-02b. Comment-level metrics (trend/keywords/explorer/top-comments)
+  are reusable per-tier via `classify_tier()` filtering in front of existing
+  `insights.py` helpers, ~150-250 LOC. The video leaderboard has no existing
+  per-tier aggregate (`_video_leaderboard()` consumes pre-aggregated
+  `per_video`, not raw comments) — that piece is new aggregation code, not a
+  reuse, and is the reason this stays deferred rather than bundled into any
+  single-sitting fix pass. Effort: ~230-370 LOC (comment-level pieces +
+  template + tests) plus an un-estimated video-leaderboard aggregation
+  addition. Effort: M (human) -> S-M (CC).
+```
+
+---
+
+## Aggregated Implementation Tasks (for post-gate execution)
+
+**FT-1 — Wire the overview scorecard into the template.**
+File: `sosmed_sentiment/report/templates/report.html.j2`. Add a new
+`<h3 class="tight">Siapa yang berbicara</h3>` block after the
+`.denominator-note` paragraph (after line 234) and before `<h3 class="tight">Temuan utama</h3>`
+(line 236), inside `#ringkasan`. Layout: `.cols2` with two `.panel`s —
+left panel: comment-vs-reply composition, reusing `charts.stacked_bar` (call
+it with `overall_summary.comment_vs_reply.comment`/`.reply` counts, treat as
+a 2-segment bar — may need a `charts_mod.stacked_bar` call with `pos=comment,
+neg=0, neu=reply` or a small new 2-value variant; use judgment matching
+existing bar conventions, label clearly since pos/neg colors don't map to
+comment/reply semantically — do not reuse `--pos`/`--neg` colors for this,
+use neutral tones). Right panel: a compact table (headers: Tier, Video,
+Komentar, Net) iterating `tier_breakdown`, styled like the `#video` section's
+existing tables. **Guard both with `{% if overall_summary.by_tier %}` /
+`{% if tier_breakdown %}`** (empty list -> omit the section entirely, matching
+the `excluded_accounts_detected` pattern at line 374). No Python changes
+required — data is already in the render context (`html_builder.py:380-381`).
+
+**FT-2 — Demote the trend headline finding + thread a population-size caveat.**
+Files: `sosmed_sentiment/report/insights.py`, `sosmed_sentiment/report/html_builder.py`,
+`sosmed_sentiment/cli/generate_report.py`. In `build_narrative()`
+(insights.py:421-437), move the `trend_delta` block from the `headline` list
+to the `risk` list; update title/body per the exact copy in TD-5 above. Add
+optional `total_population_videos: Optional[int] = None` parameter threaded:
+`generate_report.py` CLI flag (new `--total-population-videos` int option,
+optional) -> `build_report()` -> `insights.build_metrics()` -> `build_narrative()`.
+When `None`, drop the specific "~1.000 dari ~100.000" sentence and use a
+generic coverage-caveat sentence instead. Test: new
+`test_build_narrative_trend_finding_lands_in_risk_not_headline` (T3).
+
+**FT-3 — Balance the comment explorer sample by label quota.**
+File: `sosmed_sentiment/report/insights.py`, `_explorer_rows()` (:334-382).
+Add a quota stage before the existing negatif/unk-first fill: for each label
+in a **fixed tuple order** `(POS, NEG, NEU, UNK)` (reuse `CLASSIFIED_LABELS +
+(UNK,)`, never iterate a `dict`/`set` — determinism requirement), reserve
+`floor = min(EXPLORER_ROW_CAP // 4, count of that label available)` slots,
+selected by most-liked within the label (consistent with the existing
+likes-priority direction). Unused floor capacity (from a thin label) rolls
+into the general remaining-slots pool. After the quota stage, run the
+existing negatif/unk-priority-then-likes-then-RNG fill **only over comments
+not already selected**, for the remaining slots up to the cap. Update the
+`.sub` copy at `report.html.j2:404-408` to describe the new balanced logic
+(no longer "seluruh komentar negatif dan tak terklasifikasi diprioritaskan").
+Tests: rewrite `test_explorer_rows_prioritise_negatif_and_unclassified` per
+T4's exact replacement above; add T5 (zero-count label doesn't crash); verify
+T6/T7 (RNG determinism, hard cap) still pass unmodified.
+
+**FT-4 — Fix the `[hidden]` CSS bug on the explorer.**
+File: `sosmed_sentiment/report/templates/report.html.j2`. Add
+`.explorer-row[hidden]{display:none}` immediately after the `.explorer-row`
+rule block (~line 132). Also add the empty-filter-result message: inside the
+`#jelajah-rows` render loop or as a sibling `<p>` shown via the existing JS
+`apply()` function — when `visible === 0` after applying filter/search, show
+"Tidak ada komentar yang cocok dengan filter ini." (generic, since it must
+cover both the sentiment-chip filter and the search box, not just the
+per-label case) inside `#jelajah-rows`; hide it again when `visible > 0`.
+Manual QA (T8): regenerate `report.html`, click each filter chip, confirm
+rows visually disappear/reappear and the empty-state message shows/hides
+correctly.
+
+**FT-5 — No code change.** Fix #5 confirmed working as designed. If this
+lands in a release note, state: "Verified the top-commenter transparency
+table and uploader self-reply exclusion are both already automatic and
+config-driven (`config/exclude_accounts.yaml`); no gap found."
+
+**FT-6 — Documentation only.** Update `TODOS.md`'s "Per-tier narrative and
+theme breakdown" entry per TD-6's exact replacement text above. No code.
+
+---
+
+## GSTACK REVIEW REPORT — Fix Pass 2026-09-02b
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/autoplan` Phase 1 | Scope & sequencing | 1 (subagent-only) | issues_open | 1 severity upgrade (fix #3), 1 taste call reinforced (fix #2), 1 scope call (per-tier, deferred) |
+| Codex Review | n/a | Independent 2nd opinion | 0 | skipped | `[codex-unavailable: binary not found]` — all 3 phases ran `[subagent-only]` |
+| Design Review | `/autoplan` Phase 2 | UI/UX gaps (report.html.j2 in scope) | 1 (subagent-only) | issues_open | 2 under-specifications closed (fix #1 placement/copy, fix #3 empty-state copy) |
+| Eng Review | `/autoplan` Phase 3 | Architecture & tests (required) | 1 (subagent-only) | issues_open | 5 test gaps (T1/T2/T3/T5 + T4 rewrite), 1 scope correction (fix #1 guard), 1 effort estimate (per-tier) |
+| DX Review | n/a | Developer experience gaps | 0 | skipped | Out of scope — no CLI/API/developer-facing surface changed by any of the 5 fixes |
+
+**CROSS-MODEL:** Not available. Codex is not installed on this machine — no
+cross-model consensus row reaches CONFIRMED in any phase. Three independent
+Claude subagents ran instead (one per phase), each with prior-phase findings
+withheld. All three independently converged on demoting fix #2 (TD-5) without
+seeing each other's reasoning — the strongest signal this review produced.
+None of the three subagents disagreed with the primary voice on any point;
+every subagent finding sharpened an existing task or added a closed
+under-specification, never contradicted a premise.
+
+**VERDICT:** No review is CLEAR — each phase closed with `issues_open`
+because every phase surfaced at least one item that needed a decision
+(2 Taste Decisions) or a task-list addition (test gaps, copy gaps), none of
+which are blockers. **All 4 code-touching fixes (FT-1 through FT-4) are
+ready for implementation once the gate resolves TD-5 (fix #2 placement) and
+TD-6 (per-tier deferral confirmation)** — both already carry a clear
+recommendation from 3/3 independent voices. Fix #5 (FT-5) needs no
+implementation. FT-6 is a documentation-only follow-up.
+
+**UNRESOLVED DECISIONS:**
+- TD-5 — Fix #2: demote the trend headline into the risk/caveat section (recommended, 3/3 voices), or keep it as a headline finding with an inline caveat?
+- TD-6 — Per-tier narrative breakdown: keep deferred in TODOS.md with the updated effort estimate (recommended, 3/3 voices), or pull it into this batch now?
+
+---
+
+## Fix Pass — 2026-09-02c: Per-Account-Type Deep Dive
+
+Reviewed via `/autoplan` Phases 0-3 (CEO -> Design -> Eng; DX out of scope,
+no CLI/developer-facing surface beyond internal wiring). No Codex on this
+machine (confirmed a third time this session) — every phase ran
+`[codex-unavailable: binary not found]`, one independent Claude subagent per
+phase instead, prior-phase findings withheld from each.
+
+**Restore point (Phase 0):** HEAD `06d367f801291d5bd5f60104ae496fd8912701a8`,
+working tree already carries 6 modified + 5 untracked files from fix pass
+2026-09-02b (2,780 lines uncommitted: TODOS.md, this plan doc,
+`generate_report.py`, `html_builder.py`, `report.html.j2`,
+`test_html_builder.py`, plus new `charts.py`/`insights.py`/3 new test files).
+Nothing from this review touches those files yet — this section is additive.
+
+### Step 1 — Data verification (real `runs/2026-08/` data, not assumed)
+
+`comments.json`: 575 video dicts, `account_type` field is video-level, not
+comment-level. **Distribution: exactly 3 values, no nulls/empty/typos** —
+`'affiliate account'` (460), `'kol account'` (61), `'official account'` (54).
+`aweme_id` is already a `str`.
+
+`analysis_result.json`: `per_video` has 249 entries (`video_id`, str);
+`comments` has 8,475 entries (`video_id`, str, plus `is_reply`,
+`parent_comment_id`, `text_raw`, `text_clean`, `tokens_stemmed`,
+`sentiment_label`, `sentiment_confidence`, `sentiment_method`, `create_time`,
+`digg_count`, `username`).
+
+**Join match rate: 100%.** `_load_account_type_map()`
+(`generate_report.py:18-48`) builds a 575-entry `video_id -> account_type`
+map; joining against `per_video` matches all 249/249 videos
+(affiliate=152, kol=57, official=40); joining against the comment-level
+`comments` list matches all 8,475/8,475 (kol=3,621, affiliate=2,798,
+official=2,056; `is_reply` split 5,257 top-level / 3,218 replies).
+**No account_type value ever fails to classify into kol/official/affiliate
+on this dataset** — the "unknown" tier (`TIER_ORDER[3]` in
+`tiktokcomment/sampler.py:16`, matched via `classify_tier()`'s fallback,
+sampler.py:39-56) exists structurally in the code but is empty on this run.
+The spec's "never silently drop the Tidak diketahui bucket" requirement is
+therefore a defensive-correctness requirement being verified now, not a bug
+being fixed against visible bad data — worth stating plainly so nobody
+mistakes this for a data-quality finding.
+
+**Token vocabulary check** (`tokens_stemmed`, doc-frequency across all 8,475
+comments) confirms every one of the 6 requested theme categories has real,
+non-trivial support in this Indonesian-language children's-supplement
+comment corpus — none had to be forced or dropped:
+dosage/usage (`minum` 997, `sendok` 182, `botol` 254, `campur` 252,
+`konsumsi` 192), price/where-to-buy (`harga` 104, `beli` 340, `order` 18,
+`cod` 30), age/eligibility (`umur` 511, `usia` 497, `tahun` 600, `bulan` 208,
+`bb` 117, `tinggi` 70, `stunting` 2), side effects/safety (`efek` 26,
+`samping` 10, `alergi` 71, `aman` 110, `reaksi` 8), "didn't work"/results
+(`hasil` 55, `ngefek` 9, `naik` 73, `turun` 11), counterfeit/authenticity
+(`asli` 83, `palsu` 51, `ori` 11, `tiru` 1).
+
+### Scope-sizing finding: does TD-6's deferral blocker apply to this spec?
+
+**No — the blocker does not apply.** TD-6 (fix pass 2026-09-02b, above)
+deferred per-tier work specifically because "the video leaderboard has no
+per-tier equivalent" (`_video_leaderboard()` consumes pre-aggregated
+`per_video`, not raw comments — genuinely new, un-estimated aggregation
+code). This spec's 7 requirements are **entirely comment-list operations**
+(video/comment counts, sentiment composition, net score, themes, distinctive
+keywords, example comments, narrative) — none touch `_video_leaderboard()`
+or `per_video` at all. Every one of the 7 requirements has a direct existing
+analog already operating on `List[Dict]` comment lists generically:
+`_tier_breakdown()` (`html_builder.py:146-204`, already ships #1-#3 in
+production), `_top_themes()` (bigram version, `html_builder.py:123-143`),
+`_distinctive_keywords()` (`insights.py:219-272`), `_top_comments()`
+(`insights.py:188-208`), `build_narrative()` (`insights.py:424-556`). This is
+a genuine fast-follow-through, not a repeat of the same wall — confirmed by
+all three independent review voices (Step 0 below), none of which flagged
+the TD-6 blocker as recurring.
+
+### CEO DUAL VOICES — CONSENSUS TABLE
+
+```
+CEO DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                            Claude   Codex   Consensus
+  ──────────────────────────────────── ──────── ─────── ─────────
+  1. Premises valid?                   DISAGREE  N/A     DISAGREE (see TD-7)
+  2. Right problem to solve?           DISAGREE  N/A     DISAGREE (see TD-7)
+  3. Scope calibration correct?        CONFIRM*  N/A     N/A (single voice)
+  4. Alternatives sufficiently explored? DISAGREE N/A    DISAGREE (see TD-7)
+  5. Competitive/market risks covered? CONFIRM   N/A     N/A (single voice)
+  6. 6-month trajectory sound?         DISAGREE  N/A     DISAGREE (see TD-7)
+═══════════════════════════════════════════════════════════════
+Codex: [codex-unavailable: binary not found] — every row N/A on that column.
+*Row 3: subagent judged theme-detection build-risk (regex/bigram mismatch)
+as a scope-calibration concern, folded into TD-7 rather than scored separate.
+```
+
+CEO subagent (independent, plan/prior-review context withheld) argued the
+spec's tier-primary structure buries the actually valuable signal
+(theme/keyword/exemplar findings) inside a grouping dimension that may not
+carry a distinct voice at 80% affiliate-video skew, and proposed a
+theme-primary reframing (cross-tier "top complaint categories" as the main
+artifact, tier as a secondary filter) as 10x higher-value for equivalent
+build cost. See TD-7 below for disposition — **this is a single-voice
+finding** (no second independent voice to compare against, Codex
+unavailable), so per the User Challenge bar ("primary pass AND an
+independent second-voice pass both conclude the direction should change") it
+does not qualify as a User Challenge on its own. It is logged as the
+strongest Taste Decision of this review and surfaced at the gate.
+
+### Section 1-10 (CEO review body)
+
+Sections with findings are folded into TD-7 (below) and the Implementation
+Tasks. Sections run with no findings, stated per the anti-skip rule rather
+than compressed to a table row:
+
+- **Existing code leverage (0B):** every one of the 7 requirements maps
+  cleanly to an existing function pattern (see Scope-sizing finding above) —
+  no sub-problem lacks a reuse target. No gap.
+- **Dream state (0C):** CURRENT (bare tier scorecard, this session's
+  baseline) -> THIS PLAN (full per-type deep dive: composition, themes,
+  distinctive keywords, exemplars, narrative) -> 12-MONTH IDEAL (an operator
+  opens the report, reads the tier-primary deep dive for structural
+  questions, and a cross-tier theme rollup — CEO's proposed reframing,
+  deferred per TD-7 — for "what's actually wrong across the whole account"
+  questions; both views coexist, neither replaces the other). This plan
+  moves toward the ideal; it does not reach it alone.
+- **Implementation alternatives (0C-bis):** (A) tier-primary as specified —
+  reuses the most existing code, ships fastest, matches the user's verbatim
+  7-point spec exactly (Completeness 10/10 against the literal spec).
+  (B) theme-primary (CEO's proposal) — higher strategic upside per CEO
+  voice, but is a different deliverable than what was asked for, and no
+  second voice confirmed the reframing (Completeness: differs in kind, not
+  coverage, against the stated spec — N/A score). (C) hybrid: build (A) in
+  full per the spec, defer (B) as a follow-up TODOS.md item once (A) ships
+  and the affiliate-vs-others divergence hypothesis can be checked against
+  real per-type numbers instead of argued in the abstract. **Recommended:
+  (C)** — ships the user's explicit ask, converts CEO's premise challenge
+  into a falsifiable follow-up instead of a scope fight now (P6: bias toward
+  action; P1: doesn't foreclose completeness, it sequences it).
+- **Failure Modes / Error & Rescue Registry:** no runtime failure modes in
+  this section beyond what Eng review's Section 1-4 below cover (this is a
+  report-generation, not a live-service, feature — no user-facing error
+  states beyond "the section renders or the whole report build fails," and
+  `_validate()` / `ReportBuildError` already own that path unchanged).
+
+**NOT in scope (CEO phase):**
+- Theme-primary cross-tier rollup (CEO's proposed reframing) — deferred to
+  TODOS.md as a follow-up, gated on real per-type numbers from this batch
+  confirming or refuting the affiliate-dominance concern (see TD-7).
+- Any change to `_video_leaderboard()` / per-tier video leaderboard — still
+  correctly out of scope per TD-6's unchanged reasoning (untouched by this
+  spec, see Scope-sizing finding above).
+- Time-based framing (has "didn't work" grown post-campaign) — CEO's
+  alternative (b), not requested, no existing time-bucketed-by-theme
+  primitive to reuse; genuinely new aggregation work, TODOS.md candidate.
+
+**Phase 1 complete.** Codex: `[codex-unavailable]`. Claude subagent: 4
+findings (premise/problem/alternatives/trajectory), folded into TD-7.
+Consensus: 0/6 CONFIRMED (single-voice review — no cross-model comparison
+possible), 4/6 flagged by the sole voice, surfaced at the gate as TD-7.
+
+### Design litmus scorecard (Phase 2)
+
+UI scope confirmed: new HTML section in `report.html.j2` with tables,
+keyword-bar SVGs, and example-comment cards, styled against the existing
+design system (brown accent `#8A5A20`, serif headings, mono numerals,
+`.explorer-row[hidden]` pattern, `.panel`/`.cols2` layout, print-color-adjust
+fix).
+
+```
+DESIGN LITMUS SCORECARD:
+═══════════════════════════════════════════════════════════════
+  Dimension                              Claude    Codex   Consensus
+  ────────────────────────────────────── ───────── ─────── ─────────
+  1. Info hierarchy right?               2/10→8/10  N/A    N/A (single voice)
+  2. Missing states specified?           3/10→9/10  N/A    N/A (single voice)
+  3. User journey/emotional arc mapped?  4/10→8/10  N/A    N/A (single voice)
+  4. AI-slop risk (generic patterns)?    PASS       N/A    N/A (single voice)
+  5. Design-system alignment?            PASS*      N/A    N/A (single voice)
+  6. Responsive/print/no-JS safe?        7/10→9/10  N/A    N/A (single voice)
+  7. Unresolved decisions closed?        6 closed   N/A    N/A (single voice)
+═══════════════════════════════════════════════════════════════
+Codex: [codex-unavailable: binary not found].
+*Row 5: PASS conditional on reusing exact existing components (below), not a
+free-standing new visual language.
+```
+
+**Pass 1 (Information Architecture) — 2/10 -> 8/10.** A flat stack of 4
+maximal 7-subsection blocks is the wrong IA for this report's existing
+density (9 sections + sticky TOC already). **Auto-decided (Taste, P5
+explicit-over-clever default: reuse existing nav pattern):** keep the
+existing tier scorecard as the compare-at-a-glance entry point (do not
+remove it), add per-type anchor links to the sticky `nav.toc` (matches every
+other section's existing pattern), render the 4 deep-dive blocks as stacked
+sections ordered by **comment volume descending** (not fixed
+`TIER_ORDER` enum order) so the reader's attention lands on the largest tier
+first — on this dataset that's affiliate (2,798), then kol (3,621 — **note:
+kol comment count 3,621 exceeds affiliate's 2,798** despite affiliate having
+7.5x the videos; order by comment volume, not video count, since comment
+volume is what the reader actually reads through). official (2,056) last.
+
+**Pass 2 (Interaction State Coverage) — 3/10 -> 9/10.** Three specific gaps,
+each auto-decided (Mechanical — the spec's own "never drop" language settles
+these, no taste involved):
+- Unrecognized/unknown-type bucket with zero comments on this dataset: still
+  renders, with an explicit empty-state message ("Tidak ada komentar tanpa
+  tipe akun teridentifikasi"), never conditionally omitted.
+- Zero distinctive keywords below `MIN_KEYWORD_DOC_COUNT`: reuse
+  `keyword_bar_chart()`'s existing empty-state Markup
+  (`charts.py:217-218`, `<p class="chart-empty">Belum ada kata yang cukup
+  khas.</p>`) verbatim — do not build a second empty-state string.
+- Fewer than 3-5 example comments available: render whatever exists (1 or
+  2), add a quiet note when count < 3 ("hanya N komentar tersedia") rather
+  than padding or hiding the section — matches the report's existing
+  transparency instinct (denominator-note, risk section precedent).
+- Zero count within a sentiment label for a type: `stacked_bar()` already
+  skips zero-value segments correctly; the composition table underneath
+  must show an explicit "0 (0%)" row, not omit it, so totals visibly
+  reconcile.
+
+**Pass 3 (User Journey) — 4/10 -> 8/10.** Emotional arc: scorecard (quick
+compare) -> curiosity about one type -> drill-down via anchor link. Ordering
+blocks by volume (Pass 1) front-loads reader effort onto what matters most,
+closing the overload risk the subagent flagged.
+
+**Pass 4 (AI Slop Risk) — PASS.** No generic card-grid/hero patterns
+proposed; this is an App UI (data-dense, task-focused), not
+marketing/landing — App UI rules apply, not landing-page rules.
+
+**Pass 5 (Design System Alignment) — PASS, conditional.** **Auto-decided
+(Mechanical, P4 DRY):** example-comment cards reuse the existing
+`.q`/`.q-positif`/`.q-negatif` blockquote component; add `.q-netral` and
+`.q-unk` variants (currently only pos/neg exist — this is the one new CSS
+addition, not a new component). Per-type keyword bars call the exact same
+`keyword_bar_chart(rows, css_class)` used in `#kata-pembeda`, never a
+variant. Per-type composition strip reuses the existing `.kpis` component.
+Composition bar reuses `stacked_bar()` unchanged (already renders
+pos/neg/neu/unk correctly).
+
+**Pass 6 (Responsive & Accessibility) — 7/10 -> 9/10.** Tabs rejected
+outright (Mechanical, not taste): this codebase's own stated design
+principle is that JS is a "nice-to-have enhancement," proven by the
+`.explorer-row[hidden]` pattern and the explorer's own sub-copy stating
+filters work "tanpanya... seluruh baris tetap terbaca" (without it, all
+rows stay readable). `display:none`-by-default tab panels without
+guaranteed JS violate that principle for print/screenshot/no-JS readers.
+Stacked sections with anchor-link jump-nav preserve print/no-JS behavior at
+zero extra cost.
+
+**Pass 7 (Unresolved Design Decisions) — 6 closed, 0 deferred.** All decisions
+above were closed by the subagent's concrete, reuse-first recommendations;
+none needed a taste call beyond what's captured in TD-8 (below) on
+block ordering direction (volume vs. fixed enum — already decided above,
+logged as Taste since it's a real judgment call, not spec-mandated).
+
+**NOT in scope (Design phase):**
+- Redesigning the existing tier scorecard table — kept as-is, becomes the
+  entry point per Pass 1's recommendation, not touched otherwise.
+- A tabbed/accordion UI — rejected per Pass 6 (JS-dependency principle).
+- New card component styling beyond the two new blockquote variants
+  (`.q-netral`/`.q-unk`) — everything else reuses existing components.
+
+**What already exists (Design phase):** `.kpis` strip, `stacked_bar()`,
+`keyword_bar_chart()`, `.q`/`.q-positif`/`.q-negatif` blockquote component,
+`nav.toc` anchor pattern, `.panel`/`.cols2` layout, `.chart-empty` empty
+state, denominator-note/risk-section transparency copy pattern — all reused
+as-is or with the two documented CSS additions above.
+
+**Phase 2 complete.** Codex: `[codex-unavailable]`. Claude subagent: 3
+critical/high findings (IA, missing states x4, component reuse
+specification), all closed above. Consensus: 0/7 CONFIRMED (single-voice),
+7/7 closed by the sole voice's concrete recommendations. Passing to Phase 3.
+
+### ENG DUAL VOICES — CONSENSUS TABLE
+
+```
+ENG DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                            Claude   Codex   Consensus
+  ──────────────────────────────────── ──────── ─────── ─────────
+  1. Architecture sound?               DISAGREE* N/A    N/A (single voice)
+  2. Test coverage sufficient?         GAP       N/A    N/A (single voice)
+  3. Performance risks addressed?      CONFIRM   N/A    N/A (single voice)
+  4. Security threats covered?         CONFIRM   N/A    N/A (single voice)
+  5. Error paths handled?              GAP       N/A    N/A (single voice)
+  6. Deployment risk manageable?       CONFIRM   N/A    N/A (single voice)
+═══════════════════════════════════════════════════════════════
+Codex: [codex-unavailable: binary not found].
+*Row 1: "DISAGREE" against the *as-shipped* code (html_builder.py's
+_top_keywords_by_sentiment_local is a pre-existing DRY violation vs.
+insights.py's canonical log-odds method), not against this spec's design.
+```
+
+### Section 1 — Architecture
+
+**Finding (Taste Decision, logged as TD-9 below): generalize
+`_distinctive_keywords()` vs. write a parallel per-tier version.**
+**Auto-decided: generalize**, in `insights.py` (P4 DRY + P5 explicit —
+matches this codebase's own established precedent of routing every
+net-score computation through one canonical function). Exact signature:
+
+```python
+def _weighted_log_odds(
+    target: List[Dict[str, Any]],
+    comparison: List[Dict[str, Any]],
+    *, limit: int = KEYWORDS_PER_LABEL
+) -> List[Dict[str, Any]]:
+```
+
+Takes two already-filtered comment lists (not labels/tiers) — keeps
+`insights.py` free of any `classify_tier` import (that stays html_builder's
+job, matching the existing `account_type_map` plumbing).
+`_distinctive_keywords()` becomes a thin wrapper calling this per sentiment
+label with `comparison = all comments` (preserves current public signature
+and behavior exactly — zero regression risk to existing callers/tests). A
+new `_distinctive_keywords_by_tier(comments_by_tier: Dict[str, List[Dict]])
+-> Dict[str, List[Dict]]` calls the same primitive per tier.
+
+**Corpus-choice decision (Mechanical, not taste — determined by matching
+existing convention, not a new judgment call):** comparison corpus for a
+tier's distinctive words = the FULL corpus (all tiers, target tier included
+in the pool) — matches `_distinctive_keywords()`'s existing per-label
+convention exactly (`all_tokens` sums every label including the target,
+`insights.py:242-244`). Documented explicitly in the new function's
+docstring per the subagent's specific warning that this is the kind of
+choice a future reviewer will "fix" incorrectly without the doc note.
+
+**Finding: pre-existing DRY violation, not introduced by this feature but
+touched by it.** `_top_keywords_by_sentiment_local()`
+(`html_builder.py:101-120`, plain frequency) is materially weaker than
+`_distinctive_keywords()` (document-frequency log-odds) and is exactly the
+kind of second-implementation this codebase's `classified_base()` docstring
+warns against. **Auto-decided (P4 DRY): delete
+`_top_keywords_by_sentiment_local()` and its one call site in
+`_tier_breakdown()` (html_builder.py:197-199), replaced by
+`_distinctive_keywords_by_tier()`** — a scope expansion of ~15 lines removed
++ 1 call-site swap, inside blast radius, under a day of CC effort (auto-
+approved per P2 boil-lakes).
+
+**Theme detection placement:** new `_theme_matches(comments: List[Dict]) ->
+Dict[str, List[Dict[str, Any]]]` in `insights.py` (metrics layer, not
+rendering — matches the existing division of labor stated explicitly in
+`_mask_top_comments`'s and `_attach_video_bars`'s docstrings,
+`html_builder.py:266-294`). Six precompiled `re.compile` patterns as a
+module-level `THEME_PATTERNS: Dict[str, re.Pattern]` constant, matched
+against `tokens_stemmed` (not raw `text_raw` — cheaper, structurally immune
+to backtracking blowup per the security finding below). Literal-only
+alternation patterns with explicit word boundaries
+(e.g. `re.compile(r'\b(?:minum|sendok|botol|campur|konsumsi)\b')`), each
+token `re.escape()`'d before compiling — closes the ReDoS/false-positive
+risk (ENG Section 4 below) at the source. Themes are **not mutually
+exclusive per comment** (a comment can match both dosage and price) —
+**auto-decided (Mechanical): count matches per theme independently**, since
+the spec asks for "dominant themes ... sorted by frequency" per type, not a
+single-label classification.
+
+**`_tier_breakdown()`'s existing "leave out empty tiers" behavior directly
+conflicts with this spec's "never drop the unknown bucket" requirement**
+(`html_builder.py:163-165`: `if not group: continue`). **Auto-decided
+(Mechanical — spec is explicit, not a judgment call): remove the skip.**
+`_tier_breakdown()` now always returns all 4 `TIER_ORDER` entries
+(zero-value dicts for empty ones), used by both the existing scorecard
+(FT-1, harmless to show a zero row there) and this feature's deep dive
+(where it's required). One function, one behavior change, no parallel path.
+
+### Section 2 — Code Quality
+
+Findings folded into Section 1 above (the DRY violation) and Implementation
+Tasks below. No additional Code Quality findings beyond those.
+
+### Section 3 — Test Review (never skipped/compressed)
+
+**Test diagram** (every new codepath from this feature):
+
+```
+insights.py
+ ├── _weighted_log_odds(target, comparison)              [NEW]
+ │    ├── [GAP] target empty (n_target=0) → returns []
+ │    ├── [GAP] comparison empty → n_other=0, division still safe (n_all=0 guard needed)
+ │    ├── [GAP] identical target==comparison → all scores ~0 (symmetric case)
+ │    └── [GAP] below MIN_KEYWORD_DOC_COUNT floor → filtered, empty rows
+ ├── _distinctive_keywords() [refactored to wrap _weighted_log_odds]
+ │    └── [★★★ EXISTING] must still pass unmodified — regression test required
+ ├── _distinctive_keywords_by_tier(comments_by_tier)      [NEW]
+ │    ├── [GAP] tier with 0 comments
+ │    ├── [GAP] tier with comments but 0 above doc-count floor
+ │    └── [GAP] cross-check: per-tier scores computed against full corpus, not tier-excluded
+ ├── _theme_matches(comments)                             [NEW]
+ │    ├── [GAP] 0 matches (comment matches no theme)
+ │    ├── [GAP] all 6 themes matched by one comment (overlapping)
+ │    ├── [GAP] regex literal-safety: token containing regex metachar (defensive test)
+ │    └── [GAP] word-boundary correctness (e.g. "asli" doesn't match inside a longer stemmed token)
+ ├── _tier_example_comments(comments, tier, limit=5)      [NEW, analogous to _top_comments]
+ │    ├── [GAP] tier with <3 comments → returns all, no padding
+ │    ├── [GAP] tier with 0 comments → returns []
+ │    └── [GAP] ties on digg_count → deterministic secondary sort needed (stable sort by comment_id)
+ ├── _tier_breakdown() [MODIFIED: no longer skips empty tiers]
+ │    ├── [★★  EXISTING] non-empty tiers — must still pass
+ │    └── [GAP] REGRESSION: empty tier (e.g. unknown on this dataset) now returns zero-value dict
+ │              instead of being omitted — existing tests asserting omission must be updated,
+ │              flagged CRITICAL per the Regression Rule (IRON RULE — no AskUserQuestion, always added)
+ └── build_narrative()-analog per-tier                    [NEW: _build_tier_narrative()]
+      ├── [GAP] 1-2 templated sentences, comparing tier to others — needs fixture with
+      │         known cross-tier deltas to assert comparison direction (not just presence)
+      └── [GAP] tier is the only one with data (degenerate single-tier case, comparison undefined)
+
+html_builder.py
+ ├── _tier_breakdown() call site                          [MODIFIED — see above]
+ └── new deep-dive assembly (masking usernames in example comments — MUST route through
+     existing _mask_username(), same as _mask_top_comments() does)
+      └── [GAP] tier example comments must be masked before render — easy to forget since
+                this is a new call site, not an edit to _mask_top_comments() itself
+
+cli/generate_report.py
+ └── plain-text sanity-check printer (per-type net + video/comment counts, BEFORE HTML write)  [NEW]
+      ├── [GAP] must print for ALL tiers including empty "unknown" — direct conflict risk with
+      │         _tier_breakdown()'s pre-fix omission behavior (closed by the fix above)
+      ├── [GAP] snapshot/contains-test that it prints before the HTML file write, not after
+      └── [→E2E?] STICK WITH UNIT — this is a deterministic string-formatting function over
+                  already-computed metrics, no I/O branching worth an integration test
+
+report.html.j2
+ └── new deep-dive section, 4 stacked blocks ordered by comment-volume descending
+      └── [GAP] manual QA (no template unit-test infra exists in this repo for Jinja output
+                beyond html_builder tests) — anchor links resolve, empty-state copy renders,
+                zero-count rows show "0 (0%)" not blank
+```
+
+**COVERAGE: 0/17 new paths tested (0%, all new) | GAPS: 17 (1 CRITICAL
+regression, 1 manual-QA, rest unit)**
+
+**REGRESSION RULE (IRON, no AskUserQuestion, always added):** `_tier_breakdown()`'s
+behavior change (no longer skipping empty tiers) is a modification of
+existing, tested behavior. `test_html_builder.py`'s existing assertions that
+an empty tier is omitted from the result list must be updated to assert a
+zero-value dict is present instead — flagged CRITICAL and added to the task
+list unconditionally (T-ENG-9 below).
+
+**Test plan artifact:** written to
+`C:\Users\asets\Documents\tiktok-comment-scrapper\docs\plans\` is not the
+target — per the skill, this would normally write to
+`~/.gstack/projects/{slug}/{user}-{branch}-eng-review-test-plan-{datetime}.md`,
+but the `~/.gstack/` tooling (gstack-slug, gstack-review-log, etc.) is not
+present/invoked in this session (autoplan's telemetry/brain/artifacts-sync
+infrastructure was explicitly out of scope for this run per the task's
+skip list). The test diagram above is the complete test plan; it is
+recorded in this plan doc instead, which is the durable artifact for this
+repo.
+
+### Section 4 — Performance
+
+No N+1 concerns: every new function operates on already-in-memory comment
+lists (max 8,475 items), same order of magnitude as existing
+`_distinctive_keywords()`/`_tier_breakdown()` which already run fine on this
+dataset. `_weighted_log_odds()` is O(n) over each comment list plus O(k log
+k) sort over distinct tokens (k << n) — same complexity class as the
+function it generalizes. Regex theme-matching against `tokens_stemmed`
+(pre-tokenized, short strings, literal-alternation patterns) adds
+O(comments × themes) with no backtracking risk (Section 1 above). No new
+caching or memory concerns beyond what already exists.
+
+### Section 5-10 (remaining CEO-inherited sections, Eng lens)
+
+No additional findings — see CEO phase's own Section 1-10 pass above for
+sections 5-10's disposition (Error/Rescue Registry, Failure Modes) which
+apply unchanged to this feature (report-generation only, no live-service
+error surface).
+
+**NOT in scope (Eng phase):**
+- Template-level Jinja unit tests — this repo has no such infra; QA is
+  manual per the test diagram, consistent with FT-4's precedent (T8 in the
+  prior fix pass was also manual QA, not fabricated automated coverage).
+- Refactoring `_top_themes()` (bigram version) — kept as-is for the existing
+  general "recurring word pairs" use elsewhere; the new `_theme_matches()`
+  is a distinct, named-category primitive, not a replacement.
+
+**What already exists (Eng phase):** `_weighted_log_odds` reuses
+`_distinctive_keywords()`'s exact math (Jeffreys +0.5 prior, sqrt variance,
+doc-frequency via `set()`); `_theme_matches` reuses the `tokens_stemmed`
+field already computed by the analyze pipeline (no new preprocessing);
+`_tier_example_comments` reuses `_top_comments()`'s sort-by-digg_count
+pattern; masking reuses `_mask_username()`/`_mask_top_comments()`'s existing
+call pattern; the sanity-check printer reuses `metrics`/`tier_breakdown`
+data already assembled by `build_report()` — no new I/O, no new data
+sources beyond the already-wired `account_type_map`.
+
+**Phase 3 complete.** Codex: `[codex-unavailable]`. Claude subagent: 6
+findings (architecture generalization, pre-existing DRY violation,
+theme-detection design, `_tier_breakdown()` conflict, corpus-choice
+ambiguity, 17-path test gap). Consensus: 0/6 CONFIRMED (single-voice, no
+cross-model comparison possible). Passing to Phase 4 (Final Gate).
+
+### Decision Audit Trail
+
+| # | Decision | Class | Principle | Disposition |
+|---|----------|-------|-----------|--------------|
+| D1 | Data verification: account_type distribution, join match rate | Mechanical | P1 (completeness — verify before design) | Auto-decided: 100% join match, 3 real types, no nulls; documented above |
+| D2 | Scope-sizing: does TD-6's video-leaderboard blocker apply? | Mechanical | P2 (boil-lakes, blast radius) | Auto-decided: no — spec is comment-list-only, blocker doesn't recur |
+| D3 | `_weighted_log_odds()`: generalize vs. parallel implementation | Taste (logged TD-9) | P4 DRY, P5 explicit | Auto-decided: generalize, exact signature above |
+| D4 | Corpus choice for tier distinctive words (full corpus vs. tier-excluded) | Mechanical (matches existing convention) | P5 explicit-over-clever | Auto-decided: full corpus incl. target tier, matches `_distinctive_keywords()` precedent |
+| D5 | Delete pre-existing `_top_keywords_by_sentiment_local()` DRY violation | Mechanical | P4 DRY, P2 boil-lakes (in blast radius, <1 day CC) | Auto-decided: delete, replace call site |
+| D6 | Theme detection: keyword/regex vs. bigram reuse | Mechanical (spec requires named categories) | P5 explicit | Auto-decided: new `_theme_matches()`, literal-alternation regex, word-boundary safe |
+| D7 | Themes mutually exclusive per comment? | Mechanical (spec asks "sorted by frequency" per type, not single-label) | P5 explicit | Auto-decided: not mutually exclusive, independent counts |
+| D8 | `_tier_breakdown()`'s empty-tier omission vs. spec's never-drop requirement | Mechanical (spec is explicit) | P1 completeness | Auto-decided: remove the skip, always return all 4 tiers |
+| D9 | Block ordering: fixed `TIER_ORDER` enum vs. comment-volume descending | Taste (logged TD-8) | P5 explicit, hierarchy-as-service | Auto-decided: volume descending |
+| D10 | Tabs vs. stacked sections for the 4 deep-dive blocks | Mechanical (codebase's own no-JS-dependency principle) | P5 explicit | Auto-decided: stacked sections + anchor nav, no tabs |
+| D11 | Example-comment card component: new vs. reuse `.q`/`.q-positif`/`.q-negatif` | Mechanical | P4 DRY | Auto-decided: reuse, add `.q-netral`/`.q-unk` variants only |
+| D12 | Regex pattern safety (ReDoS) | Mechanical | Security (P5 explicit) | Auto-decided: literal-alternation only, `re.escape()`'d, matched against `tokens_stemmed` not `text_raw` |
+| D13 | Sanity-check printer must cover empty "unknown" tier | Mechanical (spec explicit) | P1 completeness | Auto-decided: yes, unconditionally — depends on D8's fix |
+
+### Taste Decisions (surfaced for the gate)
+
+#### TD-7 — CEO's tier-primary vs. theme-primary reframing
+
+**Recommendation: build tier-primary as specified (Alternative C from 0C-bis
+above)** — ship the user's explicit 7-point spec in full, and separately log
+a TODOS.md follow-up for a cross-tier theme-primary rollup, gated on
+checking the real per-type numbers this batch will produce (does affiliate's
+profile actually mirror the overall corpus, or does it diverge — this batch
+answers that question empirically instead of by argument).
+
+**Why:** The user's task brief explicitly says "Read the following
+7-requirement feature spec ... verbatim intent — do not water down any
+requirement, but you MAY refine implementation approach." The CEO subagent's
+finding is a single independent voice (no second voice to compare against —
+Codex unavailable) arguing the *structure* should change, which is exactly
+the kind of finding this task's Decision Classification rules require a
+second independent voice to confirm before it can become a User Challenge.
+It didn't get one. Downgrading it to a Taste Decision — not silently
+dropping it — is the correct disposition: the finding is real and worth the
+gate's attention, but a single voice does not meet the bar to override an
+explicit, verbatim user requirement.
+
+**Downstream impact of the alternative (theme-primary instead of/before
+tier-primary):** Would deliver the CEO subagent's claimed 10x-value view
+sooner, and would avoid a real risk it named (affiliate's 460/575 video
+share meaning 3 of 4 blocks may read as redundant against the overall
+report). But it replaces a concretely-specified, already-scoped deliverable
+with a redesigned one mid-review, without a second voice confirming the
+premise, and without the empirical check (this batch's own output) that
+could settle the question cheaply. If the gate wants theme-primary
+instead, that is the human's call to make explicitly — not something this
+review should have defaulted into.
+
+#### TD-8 — Deep-dive block ordering: fixed tier order vs. comment-volume descending
+
+**Recommendation: comment-volume descending** (affiliate first per this
+dataset's numbers if ranked by comment count would actually put kol first —
+**kol has 3,621 comments vs. affiliate's 2,798** despite affiliate having
+7.5x the video count — so the real order on this dataset is kol, affiliate,
+official, unknown-if-nonempty).
+
+**Why:** Design subagent's "hierarchy as service" finding — front-load
+reader attention onto what they'll actually read through most, not onto
+what has the most videos. This is a genuine judgment call (not spec-
+mandated either direction), so it's logged as Taste rather than Mechanical.
+
+**Downstream impact of the alternative (fixed `TIER_ORDER` = kol, official,
+affiliate, unknown):** Simpler to implement (iterate `TIER_ORDER` directly,
+no extra sort), and matches the tier scorecard's existing row order (FT-1)
+for visual consistency between the two views. Costs the reader nothing
+functionally — all 4 blocks render either way — but on this dataset
+happens to put official (2,056 comments, the smallest) ahead of affiliate
+(2,798) under the fixed order, which is the ordering the Design subagent
+specifically flagged as burying the more-read block. If the gate prefers
+matching the scorecard's row order for consistency over volume-based
+front-loading, that's a legitimate alternative call.
+
+#### TD-9 — `_weighted_log_odds()` generalization vs. parallel per-tier implementation
+
+**Recommendation: generalize** (exact signature in Eng Section 1 above).
+
+**Why:** This codebase has an explicit, stated precedent for exactly this
+kind of consolidation — `classified_base()`'s docstring: "Routing every
+net-score call through this one function closes that gap structurally
+instead of by convention," citing a prior defect from two divergent
+implementations answering the same question differently. A parallel
+per-tier log-odds implementation would be the same category of risk
+(sentiment-label version and tier version silently drifting apart under
+future edits) that this codebase has already paid down once and documented
+explicitly as a lesson.
+
+**Downstream impact of the alternative (parallel per-tier
+implementation):** Marginally less refactor risk to the existing,
+already-tested `_distinctive_keywords()` (zero lines of that function
+change under the parallel approach vs. becoming a thin wrapper under the
+generalized approach). But creates the exact two-implementations-of-one-
+concept risk `classified_base()`'s docstring warns against, and the Eng
+subagent's independent finding (unprompted with this precedent) converged
+on generalization anyway — this is one of the few points where the
+subagent's reasoning and the codebase's own stated history point the same
+direction without being fed to each other.
+
+### Aggregated Implementation Tasks (for post-gate execution)
+
+**T-ENG-1 — Generalize the log-odds primitive.**
+File: `sosmed_sentiment/report/insights.py`. Add
+`_weighted_log_odds(target, comparison, *, limit=KEYWORDS_PER_LABEL)`
+(exact signature, TD-9/Eng Section 1 above) extracted from the loop body of
+`_distinctive_keywords()` (:219-272). Refactor `_distinctive_keywords()` to
+call it once per label in `CLASSIFIED_LABELS` with `comparison = comments`
+(all comments) — public signature/behavior unchanged, existing tests in
+`tests/sosmed_sentiment/report/test_insights.py` must still pass unmodified
+as a regression check. Document the full-corpus-including-target convention
+in the new function's docstring (D4 above).
+
+**T-ENG-2 — Per-tier distinctive keywords.**
+File: `sosmed_sentiment/report/insights.py`. Add
+`_distinctive_keywords_by_tier(comments_by_tier: Dict[str, List[Dict[str,
+Any]]]) -> Dict[str, List[Dict[str, Any]]]` calling `_weighted_log_odds()`
+per tier with `comparison = all comments across every tier` (D4). Takes
+already-tiered comment lists — no `classify_tier` import into `insights.py`.
+
+**T-ENG-3 — Theme detection.**
+File: `sosmed_sentiment/report/insights.py`. Add module-level
+`THEME_PATTERNS: Dict[str, re.Pattern]` (6 categories: dosage_usage,
+price_availability, age_eligibility, safety_side_effects, result_complaints,
+counterfeit_authenticity — literal-alternation, word-boundary, `re.escape()`
+per token, matched against `tokens_stemmed`). Add `_theme_matches(comments:
+List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]` returning per-theme
+match count + share_pct, sorted by frequency descending, not mutually
+exclusive (D6/D7).
+
+**T-ENG-4 — Per-tier example comments.**
+File: `sosmed_sentiment/report/insights.py`. Add `_tier_example_comments(
+comments: List[Dict[str, Any]], limit: int = 5) -> List[Dict[str, Any]]`,
+analogous to `_top_comments()` (:188-208) but not sentiment-label-scoped —
+sorted by `digg_count` descending, deterministic tiebreak by `comment_id`
+(Test Review gap above), returns fewer than `limit` without padding when the
+tier has &lt;5 comments.
+
+**T-ENG-5 — Per-tier composition + net + narrative assembly.**
+File: `sosmed_sentiment/report/insights.py`. Add
+`_build_tier_deep_dive(comments_by_tier, per_video) -> List[Dict[str,
+Any]]` combining T-ENG-1 through T-ENG-4's outputs plus video/comment
+counts + % of total (requirement #1), sentiment composition counts+
+proportions including `tidak_terklasifikasi` (requirement #2 — note
+`html_builder._sentiment_counts()` currently omits UNK; the new function
+must not inherit that omission), net score via existing
+`classified_base()`/`net_score()` (requirement #3, D8's fix makes this
+correct for empty tiers too), and `_build_tier_narrative()` — 1-2 templated
+%-formatted sentences per tier comparing it to the others (requirement #7,
+no LLM). Called once from `build_metrics()`.
+
+**T-ENG-6 — Fix `_tier_breakdown()`'s empty-tier omission (D8).**
+File: `sosmed_sentiment/report/html_builder.py`, `_tier_breakdown()`
+(:146-204) and `_overall_summary()` (:207-243) — both currently skip empty
+tiers (`if not group: continue`). Remove the skip in both; return zero-value
+dicts for empty tiers instead. **Flagged CRITICAL regression per the Iron
+Rule** — update existing assertions in `test_html_builder.py`.
+
+**T-ENG-7 — Delete the pre-existing DRY violation (D5).**
+File: `sosmed_sentiment/report/html_builder.py`. Delete
+`_top_keywords_by_sentiment_local()` (:101-120) and its call site in
+`_tier_breakdown()` (:197-199); replace with `insights_mod
+._distinctive_keywords_by_tier()` (T-ENG-2) called once in `build_report()`
+and threaded into `_tier_breakdown()`'s per-tier dicts.
+
+**T-ENG-8 — Mask example-comment usernames.**
+File: `sosmed_sentiment/report/html_builder.py`. New call site for T-ENG-4's
+output must route through the existing `_mask_username()` before render,
+matching `_mask_top_comments()`'s pattern (:263-277) — do not edit
+`_mask_top_comments()` itself, add a parallel masking pass for the new
+tier-example-comments data (Test Review gap, easy-to-forget new call site).
+
+**T-ENG-9 — Chat-postable sanity-check output (explicit user requirement).**
+File: `sosmed_sentiment/cli/generate_report.py`. In `run_generate_report()`,
+before the `handle.write(html)` call (:92), print a plain-text table to
+stdout via `logger.info` or `click.echo`: per-tier net sentiment + video
+count + comment count, for ALL tiers including empty "unknown" (depends on
+T-ENG-6's fix). Format: one line per tier, e.g. `KOL: net +42.1, 57 video,
+3621 komentar`. This must run even when `--output` points somewhere the
+user won't immediately open, so the sanity-check is visible in the terminal
+output before the full HTML render.
+
+**T-ENG-10 — Template section: 4 stacked deep-dive blocks.**
+File: `sosmed_sentiment/report/templates/report.html.j2`. Add a new
+section after the existing tier scorecard (FT-1's `#ringkasan` block from
+fix pass 2026-09-02b), ordered by comment-volume descending (D9/TD-8), each
+block: `.kpis` strip (video/comment count + % of total) -> `stacked_bar()`
+composition -> 1-2 narrative sentences -> dominant-themes table -> distinctive-
+keywords `keyword_bar_chart()` -> 3-5 example-comment cards (`.q`/`.q-positif`/
+`.q-negatif`/`.q-netral`/`.q-unk`, new variants added to `<style>`). Add
+per-type anchor entries to `nav.toc`. Empty-state copy for zero-comment
+unknown bucket, zero-keyword chart-empty reuse, sparse-example-comments note
+— all per Design Pass 2 above. Guard nothing conditionally on the section
+level (unlike FT-1's `{% if tier_breakdown %}` — this section always renders
+all tiers per D8).
+
+**T-ENG-11 (test) — Regression + new-path coverage.**
+Files: `tests/sosmed_sentiment/report/test_insights.py`,
+`test_html_builder.py`, `test_report_integration.py`. Add tests for every
+`[GAP]` in the Test Review diagram above (17 paths); update existing
+`_tier_breakdown()` omission-assertion tests per the Iron Rule (T-ENG-6).
+
+**T-ENG-12 (docs) — TODOS.md follow-up for TD-7.**
+File: `TODOS.md`. Add an entry for the theme-primary cross-tier rollup
+(CEO's proposed reframing), gated on this batch's real per-type numbers
+confirming or refuting the affiliate-dominance concern — not blocked on
+anything else. Effort: TBD pending the empirical check.

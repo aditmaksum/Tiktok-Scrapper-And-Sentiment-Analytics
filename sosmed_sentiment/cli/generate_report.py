@@ -9,7 +9,7 @@ import click
 from loguru import logger
 
 from sosmed_sentiment.errors import ReportBuildError
-from sosmed_sentiment.report.html_builder import build_report
+from sosmed_sentiment.report.html_builder import build_report, build_tier_summary
 
 __title__ = 'Sosmed Sentiment Pipeline - generate_report'
 __version__ = '0.1.0'
@@ -48,11 +48,34 @@ def _load_account_type_map(
     }
 
 
+def _print_tier_sanity_check(
+    tier_rows: Any
+) -> None:
+    """T-ENG-9 (explicit user requirement): a plain-text, chat-postable table
+    of per-tier net sentiment + video/comment counts, printed to the console
+    log BEFORE the HTML file is written - so the numbers are visible in the
+    terminal even when --output points somewhere the user won't immediately
+    open. Prints every tier `build_tier_summary()` returns, including a
+    zero-comment "Unknown" tier (depends on html_builder._tier_breakdown()'s
+    D8 fix: it no longer omits an empty tier).
+    """
+    logger.info('Sanity check per tipe akun (sebelum menulis HTML):')
+    for row in tier_rows:
+        # total_count (top-level + balasan), not comment_count (top-level
+        # saja) - matches the spec's per-type comment count (kol=3.621,
+        # affiliate=2.798, official=2.056 on the 2026-08 run), which counts
+        # every comment tied to the tier, replies included.
+        logger.info('%s: net %+.1f, %d video, %d komentar' % (
+            row['label'], row['net'], row['video_count'], row['total_count']
+        ))
+
+
 def run_generate_report(
     input_path: str,
     output_path: str,
     template_path: str,
-    comments_json_path: str = None
+    comments_json_path: str = None,
+    total_population_videos: int = None
 ) -> int:
     with open(input_path, encoding='utf-8') as handle:
         data: Dict[str, Any] = json.load(handle)
@@ -72,13 +95,19 @@ def run_generate_report(
             template_dir, template_name = os.path.split(template_path)
             html = build_report(
                 data, template_dir=template_dir, template_name=template_name,
-                account_type_map=account_type_map
+                account_type_map=account_type_map,
+                total_population_videos=total_population_videos
             )
         else:
-            html = build_report(data, account_type_map=account_type_map)
+            html = build_report(
+                data, account_type_map=account_type_map,
+                total_population_videos=total_population_videos
+            )
     except ReportBuildError as error:
         logger.error(str(error))
         return 2
+
+    _print_tier_sanity_check(build_tier_summary(data, account_type_map))
 
     output_dir = os.path.dirname(output_path)
     if output_dir:
@@ -102,8 +131,8 @@ def run_generate_report(
 )
 @click.option(
     '--output', 'output_path',
-    required=True,
-    help='path to write report.html'
+    default=None,
+    help='path to write report.html (default: report.html next to --input)'
 )
 @click.option(
     '--template',
@@ -120,13 +149,31 @@ def run_generate_report(
     help='source comments.json, for the per-account-type breakdown '
          '(default: comments.json next to --input)'
 )
+@click.option(
+    '--total-population-videos',
+    'total_population_videos',
+    default=None,
+    type=int,
+    help='operator-supplied estimate of the account\'s TOTAL video count '
+         '(not derivable from --input, which only describes the sampled '
+         'videos) - enables the demoted trend caveat to state how thin the '
+         'sample is relative to the real population; omitted by default'
+)
 def main(
     input_path: str,
     output_path: str,
     template_path: str,
-    comments_json_path: str
+    comments_json_path: str,
+    total_population_videos: int
 ) -> None:
-    sys.exit(run_generate_report(input_path, output_path, template_path, comments_json_path))
+    if not output_path:
+        # plan §5: the original "command too long" complaint - defaults next
+        # to --input so the common case is one flag, not two.
+        output_path = os.path.join(os.path.dirname(input_path) or '.', 'report.html')
+    sys.exit(run_generate_report(
+        input_path, output_path, template_path, comments_json_path,
+        total_population_videos
+    ))
 
 
 if __name__ == '__main__':

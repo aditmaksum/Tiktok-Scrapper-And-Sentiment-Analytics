@@ -2,423 +2,602 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<title>Laporan Sentimen &amp; Messaging</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Laporan Sentimen &amp; Messaging{% if run_id %} &mdash; {{ run_id }}{% endif %}</title>
 <style>
-  :root {
-    --color-bg: #F7F8FA;
-    --color-surface: #FFFFFF;
-    --color-text: #1A1D24;
-    --color-text-muted: #5B6270;
-    --color-border: #E2E5EA;
-    --color-positif: #1E7E4F;
-    --color-negatif: #B0362C;
-    --color-netral: #7A8290;
-    --color-accent: #2454A6;
-  }
-  body {
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-family: Inter, system-ui, -apple-system, sans-serif;
-    font-size: 14px;
-    line-height: 1.6;
-    margin: 0;
-    padding: 24px;
-  }
-  main { max-width: 960px; margin: 0 auto; }
-  h1 { font-size: 28px; font-weight: 700; line-height: 1.3; margin-bottom: 4px; }
-  h2 { font-size: 18px; font-weight: 600; line-height: 1.4; color: var(--color-accent); margin-top: 40px; }
-  .metadata { color: var(--color-text-muted); font-size: 12px; margin-bottom: 24px; }
-  .cards { display: flex; gap: 16px; flex-wrap: wrap; }
-  .card {
-    background: var(--color-surface);
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    padding: 16px 24px;
-    min-width: 160px;
-  }
-  .card .number { font-size: 32px; font-weight: 700; line-height: 1.2; }
-  .card .label { font-size: 12px; color: var(--color-text-muted); }
-  .bar-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-  .bar-label { width: 90px; flex-shrink: 0; }
-  .bar-track { flex-grow: 1; background: var(--color-border); border-radius: 4px; height: 16px; overflow: hidden; }
-  .bar-fill { height: 100%; }
-  .bar-fill.positif { background: var(--color-positif); }
-  .bar-fill.negatif { background: var(--color-negatif); }
-  .bar-fill.netral { background: var(--color-netral); }
-  .bar-value { width: 90px; text-align: right; flex-shrink: 0; }
-  table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-  th, td { text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--color-border); font-size: 14px; }
-  th { color: var(--color-text-muted); font-weight: 600; font-size: 12px; }
-  .keyword-columns { display: flex; gap: 24px; flex-wrap: wrap; }
-  .keyword-columns > div { flex: 1; min-width: 240px; }
-  .quote-card {
-    background: var(--color-surface);
-    border-left: 3px solid var(--color-border);
-    border-radius: 4px;
-    padding: 12px 16px;
-    margin: 8px 0;
-  }
-  .quote-card.positif { border-left-color: var(--color-positif); }
-  .quote-card.negatif { border-left-color: var(--color-negatif); }
-  .quote-card.netral { border-left-color: var(--color-netral); }
-  .quote-username { color: var(--color-text-muted); font-size: 12px; }
-  .methodology {
-    margin-top: 48px;
-    padding-top: 16px;
-    border-top: 1px solid var(--color-border);
-    color: var(--color-text-muted);
-    font-size: 13px;
-  }
-  .empty-state {
-    background: var(--color-surface);
-    border-radius: 8px;
-    padding: 24px;
-    text-align: center;
-    color: var(--color-text-muted);
-  }
-  .section {
-    background: var(--color-surface);
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    padding: 20px 24px;
-    margin-top: 16px;
-  }
-  .tier-section { margin-top: 56px; }
-  .tier-section > h2 {
-    margin-top: 0;
-    font-size: 22px;
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-  }
-  .tier-badge {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    padding: 2px 10px;
-  }
-  .stacked-bar {
-    display: flex;
-    height: 20px;
-    border-radius: 4px;
-    overflow: hidden;
-    background: var(--color-border);
-  }
-  .stacked-bar .seg.positif { background: var(--color-positif); }
-  .stacked-bar .seg.negatif { background: var(--color-negatif); }
-  .stacked-bar .seg.netral { background: var(--color-netral); }
-  .stacked-bar .seg.reply { background: var(--color-accent); }
-  .stacked-bar .seg.comment { background: var(--color-positif); }
-  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--color-text-muted); }
-  .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
-  .legend .dot.positif { background: var(--color-positif); }
-  .legend .dot.negatif { background: var(--color-negatif); }
-  .legend .dot.netral { background: var(--color-netral); }
-  .legend .dot.comment { background: var(--color-positif); }
-  .legend .dot.reply { background: var(--color-accent); }
-  .tier-row { margin: 14px 0; }
-  .tier-row .tier-row-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
-  .tier-row .tier-row-label .name { font-weight: 600; }
-  .tier-row .tier-row-label .n { color: var(--color-text-muted); }
-  .mini-cards { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 4px; }
-  .mini-card {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    padding: 10px 16px;
-    min-width: 130px;
-  }
-  .mini-card .number { font-size: 22px; font-weight: 700; }
-  .mini-card .label { font-size: 11px; color: var(--color-text-muted); }
-  .theme-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .theme-chip {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    padding: 4px 12px;
-    font-size: 12px;
-  }
-  .theme-chip .n { color: var(--color-text-muted); }
-  h3 { font-size: 14px; margin-bottom: 4px; }
-  @media (max-width: 600px) {
-    body { padding: 12px; }
-    .card .number { font-size: 24px; }
-  }
+:root{
+ --paper:#FAF8F3; --card:#FFFFFF; --ink:#14120E; --ink-2:#57524A;
+ --ink-3:#8B857A;
+ --rule:#E4DFD3; --rule-2:#D3CCBC;
+ --pos:#2F6B4F; --pos-soft:#DCE9E0; --neg:#A93B2B; --neg-soft:#F3DED9;
+ /* --neu: 5.45:1 on --paper, 5.79:1 on --card (WCAG AA, >=3:1 for this
+    non-text UI use) - the reference's #B9B2A4 measured 1.99:1, a verified
+    defect (design review, this task's fix #6) since neutral is ~50% of the
+    data here. */
+ --neu:#6B6558; --neu-soft:#EBE7DE; --unk:#B7ADA0;
+ /* TD-3: the reference's warm brown, 5.55:1 on --paper. */
+ --accent:#8A5A20; --accent-soft:#F2E7D4;
+ --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+ --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+ --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+ font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px 96px}
+h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em;line-height:1.2}
+a{color:var(--accent)}
+.num,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+header.top{border-bottom:2px solid var(--ink);margin-bottom:34px;padding:44px 0 18px}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+ color:var(--accent);margin:0 0 12px}
+h1{font-size:clamp(28px,5vw,42px);margin:0 0 12px;max-width:24ch}
+.dek{font-size:17px;color:var(--ink-2);max-width:70ch;margin:0 0 20px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 26px;font-family:var(--mono);font-size:11.5px;
+ color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em}
+.meta b{color:var(--ink-2);font-weight:500}
+
+section{margin:56px 0 0;scroll-margin-top:64px}
+h2{font-size:24px;margin:0 0 6px;display:flex;align-items:baseline;gap:12px}
+h2 .no{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.1em}
+.sub{color:var(--ink-2);max-width:72ch;margin:0 0 22px}
+h3{font-size:17px;margin:26px 0 10px}
+h3.tight{margin-top:0}
+.rule{height:1px;background:var(--rule);border:0;margin:0 0 22px}
+
+nav.toc{position:sticky;top:0;z-index:20;background:rgba(250,248,243,.93);
+ backdrop-filter:blur(8px);border-bottom:1px solid var(--rule);margin:0 -28px 0;padding:9px 28px;
+ display:flex;gap:20px;overflow-x:auto;font-family:var(--mono);font-size:11px;
+ letter-spacing:.08em;text-transform:uppercase}
+nav.toc a{color:var(--ink-3);text-decoration:none;white-space:nowrap;padding:3px 0;border-bottom:2px solid transparent}
+nav.toc a:hover{color:var(--ink);border-color:var(--accent)}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));
+ border:1px solid var(--rule-2);background:var(--card);margin-top:28px}
+.kpi{padding:18px 20px;border-right:1px solid var(--rule);border-top:1px solid var(--rule)}
+.kpi:nth-child(-n+5){border-top:0}
+.kpi:last-child{border-right:0}
+.kpi .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.kpi .v{font-family:var(--mono);font-size:28px;line-height:1.15;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:12.5px;color:var(--ink-2)}
+.kpi-up{color:var(--pos)} .kpi-down{color:var(--neg)}
+.denominator-note{font-size:12.5px;color:var(--ink-3);margin:10px 0 0}
+
+.finds{border-top:1px solid var(--rule)}
+.find{display:grid;grid-template-columns:34px 1fr;gap:16px;padding:18px 0;border-bottom:1px solid var(--rule)}
+.find .i{font-family:var(--mono);font-size:11px;color:var(--accent);padding-top:4px}
+.find h4{font-family:var(--serif);font-size:18px;margin:0 0 4px;font-weight:600}
+.find p{margin:0;color:var(--ink-2);max-width:78ch}
+.find-warn h4::before{content:"\25B2 ";color:var(--neg);font-size:13px}
+.find-act h4::before{content:"\2192 ";color:var(--accent)}
+
+.split{display:grid;grid-template-columns:220px 1fr;gap:34px;align-items:center;margin-top:36px}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.panel{background:var(--card);border:1px solid var(--rule-2);padding:20px 22px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--ink-2);margin-top:12px}
+.legend .dot{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;border-radius:2px}
+.legend .dot-pos{background:var(--pos)} .legend .dot-neu{background:var(--neu)}
+.legend .dot-neg{background:var(--neg)} .legend .dot-unk{background:var(--unk)}
+.note{font-size:12.5px;color:var(--ink-3);margin-top:10px;max-width:76ch}
+
+.chart-grid{stroke:var(--rule);stroke-width:1}
+.chart-zero{stroke:var(--rule-2);stroke-width:1;stroke-dasharray:3 3}
+.chart-axis{font-family:var(--mono);font-size:10px;fill:var(--ink-3)}
+.chart-axis-mid{text-anchor:middle}
+.chart-bar{fill:var(--neu-soft)} .chart-bar-neg{fill:var(--neg-soft)}
+.chart-line{fill:none;stroke:var(--accent);stroke-width:2}
+.chart-dot{fill:var(--paper);stroke:var(--accent);stroke-width:2}
+.chart-seg-pos{fill:var(--pos)} .chart-seg-neg{fill:var(--neg)}
+.chart-seg-neu{fill:var(--neu)} .chart-seg-unk{fill:var(--unk)}
+/* FT-1: neutral tones, deliberately distinct from the sentiment-coded
+   chart-seg-pos/neg/neu/unk above - comment-vs-reply is not a sentiment
+   split and must not visually imply one. */
+.chart-seg-a{fill:var(--accent)} .chart-seg-b{fill:var(--rule-2)}
+.chart-stacked-bar{display:block;width:100%}
+.chart-donut-big{font-family:var(--mono);font-size:28px;text-anchor:middle;fill:var(--ink)}
+.chart-donut-sub{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-anchor:middle;
+ fill:var(--ink-3);text-transform:uppercase}
+.chart-kw-label{font-family:var(--sans);font-size:12.5px;fill:var(--ink)}
+.chart-kw-pos{fill:var(--pos)} .chart-kw-neg{fill:var(--neg)} .chart-kw-neu{fill:var(--neu)}
+.chart-kw-count{font-family:var(--mono);font-size:10.5px;fill:var(--ink-3)}
+/* keyword_bar_chart's viewBox is a fixed 320 units wide with width:100% -
+   in a narrow cols3 panel (section 06) that's fine, but the tier deep-dive
+   (section "tipe akun") puts the same chart in a full-width single panel,
+   stretching its SVG-unit font sizes proportionally huge. Cap the render
+   width so the chart never grows past its designed proportions. */
+.panel-kw svg{max-width:420px;display:block}
+.chart-empty{color:var(--ink-3);font-size:13px}
+.kw-heading-neg{color:var(--neg)} .kw-heading-pos{color:var(--pos)} .kw-heading-neu{color:var(--ink-2)}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+ color:var(--ink-3);text-align:left;font-weight:500;padding:0 10px 8px 0;border-bottom:1px solid var(--rule-2)}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule);vertical-align:middle}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+td.cap span{display:block;line-height:1.35}
+td.cap small{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+td.bar-cell{width:190px}
+td.net-neg{color:var(--neg)} td.net-pos{color:var(--pos)} td.net-mid{color:var(--ink-2)}
+tr:hover td{background:#FCFBF7}
+
+.q{margin:0 0 10px;padding:12px 14px;background:var(--card);border-left:3px solid var(--neu)}
+.q p{margin:0;font-size:14px}
+.q footer{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:6px;
+ letter-spacing:.04em;text-transform:uppercase}
+.q-negatif{border-left-color:var(--neg);background:#FEFAF9}
+.q-positif{border-left-color:var(--pos);background:#FAFCFA}
+.q-netral{border-left-color:var(--neu)}
+.q-unk{border-left-color:var(--unk)}
+
+.tier-block{margin-top:0}
+.tier-block + .tier-block{margin-top:40px;padding-top:40px;border-top:1px solid var(--rule)}
+.tier-themes td.theme-empty{color:var(--ink-3)}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.controls input[type=search]{flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--rule-2);
+ background:var(--card);font:inherit;font-size:13.5px;color:var(--ink)}
+.chip{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+ padding:7px 12px;border:1px solid var(--rule-2);background:var(--card);cursor:pointer;color:var(--ink-2)}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+#jelajah-count{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+#jelajah-rows{max-height:560px;overflow:auto;border:1px solid var(--rule-2);background:var(--card)}
+.explorer-row{display:grid;grid-template-columns:118px 1fr 108px;gap:12px;padding:10px 14px;
+ border-bottom:1px solid var(--rule);font-size:13.5px}
+.explorer-row[hidden]{display:none}
+.explorer-row:last-child{border-bottom:0}
+.tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+ padding:2px 5px;height:fit-content;text-align:center}
+.tag-positif{background:var(--pos-soft);color:var(--pos)}
+.tag-negatif{background:var(--neg-soft);color:var(--neg)}
+.tag-netral{background:var(--neu-soft);color:var(--ink-2)}
+.tag-tidak_terklasifikasi{background:var(--accent-soft);color:var(--accent)}
+.explorer-row .m{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);text-align:right}
+
+.empty-state{background:var(--card);border:1px solid var(--rule-2);padding:24px;
+ text-align:center;color:var(--ink-3);margin-top:28px}
+
+footer.end{margin-top:64px;padding-top:20px;border-top:2px solid var(--ink);
+ font-family:var(--mono);font-size:11px;color:var(--ink-3);line-height:1.9}
+.methodology{margin-top:24px;color:var(--ink-2);font-size:13px;font-family:var(--sans)}
+.methodology strong{color:var(--ink)}
+
+@media (max-width:820px){
+ .split,.cols3,.cols2{grid-template-columns:1fr}
+ .kpi{border-right:0}
+ td.bar-cell{width:110px}
+ .explorer-row{grid-template-columns:70px 1fr}.explorer-row .m{display:none}
+}
+@media print{
+ /* fix #7: without this, printed browsers drop background fills (donut,
+    stacked bars, sentiment tags) and the report prints blank where the data
+    should be - a verified defect in the reference. */
+ *{-webkit-print-color-adjust: exact;print-color-adjust: exact}
+ nav.toc{display:none}
+ body{background:#fff}
+ section{break-inside:avoid}
+ #jelajah-rows{max-height:none;overflow:visible}
+}
 </style>
 </head>
 <body>
-<main>
-  <h1>Laporan Sentimen &amp; Messaging</h1>
-  <div class="metadata">
-    Dibuat: {{ generated_at }} &middot; Sumber: {{ source_file }} &middot;
-    Rentang: {{ date_from }} &ndash; {{ date_to }}
+<div class="wrap">
+
+<nav class="toc" aria-label="Navigasi laporan">
+ <a href="#ringkasan">Ringkasan</a><a href="#tipe-akun">Tipe Akun</a><a href="#risiko">Risiko</a><a href="#aksi">Rekomendasi</a>
+ <a href="#tren">Tren</a><a href="#kata-pembeda">Kata Pembeda</a><a href="#video">Video</a>
+ <a href="#suara">Suara Nyaring</a><a href="#kualitas-data">Kualitas Data</a><a href="#jelajah">Jelajahi</a>
+</nav>
+
+<header class="top">
+ <p class="kicker">Analisis Sentimen Komentar{% if run_id %} &middot; {{ run_id }}{% endif %}</p>
+ <h1>Laporan Sentimen &amp; Messaging</h1>
+ <p class="dek">
+   Dibuat: {{ generated_at }} &middot; Sumber: {{ source_file }} &middot;
+   Rentang: {{ date_from }} &ndash; {{ date_to }}
+ </p>
+ <div class="meta">
+  <span>Video <b>{{ total_videos }}</b></span>
+  <span>Komentar mentah <b>{{ total_comments_raw }}</b></span>
+  <span>Dianalisis <b>{{ total_comments_analyzed }}</b></span>
+  <span>Dikecualikan (internal) <b>{{ total_comments_excluded_internal }}</b></span>
+ </div>
+</header>
+
+{% if total_comments_analyzed == 0 %}
+<div class="empty-state">
+  Tidak ada komentar untuk dianalisis setelah exclude-list diterapkan &mdash;
+  periksa apakah exclude-list terlalu luas.
+</div>
+{% else %}
+
+<section id="ringkasan">
+ <h2><span class="no">01</span>Ringkasan</h2>
+ <div class="kpis">
+  <div class="kpi">
+   <div class="k">Net sentimen</div>
+   <div class="v {{ 'kpi-up' if metrics.net_overall >= 0 else 'kpi-down' }}">{{ '%+.1f' % metrics.net_overall }}</div>
+   <div class="d">{{ metrics.sentiment_pct.positif_pct }}% positif &minus; {{ metrics.sentiment_pct.negatif_pct }}% negatif</div>
+  </div>
+  {% if metrics.trend_last_delta %}
+  <div class="kpi">
+   <div class="k">Bulan terakhir vs sebelumnya</div>
+   <div class="v {{ 'kpi-up' if metrics.trend_last_delta.delta >= 0 else 'kpi-down' }}">{{ '%+.1f' % metrics.trend_last_delta.delta }}</div>
+   <div class="d">{{ '%+.1f' % metrics.trend_last_delta.from_net }} &rarr; {{ '%+.1f' % metrics.trend_last_delta.to_net }}</div>
+  </div>
+  {% endif %}
+  <div class="kpi">
+   <div class="k">Net tertimbang like</div>
+   <div class="v {{ 'kpi-up' if metrics.engagement.net_by_likes >= 0 else 'kpi-down' }}">{{ '%+.1f' % metrics.engagement.net_by_likes }}</div>
+   <div class="d">{{ metrics.engagement.total_likes }} like terkumpul</div>
+  </div>
+  <div class="kpi">
+   <div class="k">Tak terklasifikasi</div>
+   <div class="v {{ 'kpi-down' if metrics.data_quality.unclassified_pct > 2 else '' }}">{{ metrics.data_quality.unclassified_pct }}%</div>
+   <div class="d">{{ metrics.data_quality.unclassified_count }} komentar gagal diproses</div>
+  </div>
+  <div class="kpi">
+   <div class="k">Eskalasi LLM</div>
+   <div class="v">{{ llm_escalation_pct }}%</div>
+   <div class="d">{{ sentiment_method_breakdown.llm }} dari {{ total_comments_analyzed }} komentar</div>
+  </div>
+ </div>
+ <p class="denominator-note">
+   Net sentimen dan seluruh angka turunannya (tren, video, kata pembeda) dihitung dari
+   <b class="mono">{{ metrics.classified_total }}</b> komentar terklasifikasi
+   ({{ total_comments_analyzed }} total &minus; {{ metrics.data_quality.unclassified_count }} tidak terklasifikasi) &mdash;
+   satu basis, dipakai di seluruh laporan ini.
+ </p>
+
+ {% if overall_summary.by_tier or tier_breakdown %}
+ <h3 class="tight">Siapa yang berbicara</h3>
+ <div class="cols2">
+  <div class="panel">
+   <h3 class="tight">Komentar vs balasan</h3>
+   {{ charts.comment_vs_reply_bar }}
+   <div class="legend">
+    <span><i class="dot" style="background:var(--accent)"></i>Komentar {{ overall_summary.comment_vs_reply.comment }} ({{ overall_summary.comment_vs_reply.comment_pct }}%)</span>
+    <span><i class="dot" style="background:var(--rule-2)"></i>Balasan {{ overall_summary.comment_vs_reply.reply }} ({{ overall_summary.comment_vs_reply.reply_pct }}%)</span>
+   </div>
+  </div>
+  {% if tier_breakdown %}
+  <div class="panel">
+   <h3 class="tight">Per tipe akun</h3>
+   <table><thead><tr><th>Tier</th><th class="num">Video</th><th class="num">Komentar</th><th class="num">Net</th></tr></thead>
+   <tbody>
+   {% for tier in tier_breakdown %}
+   <tr><td>{{ tier.label }}</td><td class="num">{{ tier.video_count }}</td>
+   <td class="num">{{ tier.comment_count }}</td>
+   <td class="num {{ 'net-neg' if tier.net < 0 else ('net-pos' if tier.net >= 40 else 'net-mid') }}">{{ '%+.0f' % tier.net }}</td></tr>
+   {% endfor %}
+   </tbody></table>
+  </div>
+  {% endif %}
+ </div>
+ {% endif %}
+
+ <h3 class="tight">Temuan utama</h3>
+ <div class="finds">
+  {% for item in metrics.narrative.headline %}
+  <div class="find"><div class="i">{{ '%02d' % loop.index }}</div><div><h4>{{ item.title }}</h4><p>{{ item.body }}</p></div></div>
+  {% endfor %}
+ </div>
+
+ <div class="split">
+  <div>{{ charts.donut }}</div>
+  <div>
+   <h3 class="tight">Distribusi sentimen</h3>
+   {{ charts.sentiment_bar }}
+   <div class="legend">
+    <span><i class="dot dot-pos"></i>Positif {{ metrics.sentiment_counts.positif }}</span>
+    <span><i class="dot dot-neu"></i>Netral {{ metrics.sentiment_counts.netral }}</span>
+    <span><i class="dot dot-neg"></i>Negatif {{ metrics.sentiment_counts.negatif }}</span>
+    <span><i class="dot dot-unk"></i>Tak terklasifikasi {{ metrics.sentiment_counts.tidak_terklasifikasi }}</span>
+   </div>
+  </div>
+ </div>
+</section>
+
+<section id="tipe-akun">
+ <h2><span class="no">02</span>Per tipe akun</h2>
+ <p class="sub">Empat tipe akun selalu ditampilkan &mdash; termasuk "Tidak diketahui" walau nol komentar
+ &mdash; diurutkan menurun berdasarkan jumlah komentar (bukan jumlah video), supaya perhatian pembaca
+ jatuh ke tipe yang paling banyak dibaca lebih dulu.</p>
+
+ {% for tier in tier_deep_dive %}
+ <div class="tier-block" id="tipe-{{ tier.tier }}">
+  <h3>{{ tier.label }}</h3>
+
+  <div class="kpis">
+   <div class="kpi">
+    <div class="k">Video</div>
+    <div class="v">{{ tier.video_count }}</div>
+   </div>
+   <div class="kpi">
+    <div class="k">Komentar</div>
+    <div class="v">{{ tier.comment_count }}</div>
+    <div class="d">{{ tier.pct_of_total }}% dari seluruh komentar</div>
+   </div>
+   <div class="kpi">
+    <div class="k">Net sentimen</div>
+    <div class="v {{ 'kpi-up' if tier.net >= 0 else 'kpi-down' }}">{{ '%+.1f' % tier.net }}</div>
+   </div>
   </div>
 
-  {% if total_comments_analyzed == 0 %}
-  <div class="empty-state">
-    Tidak ada komentar untuk dianalisis setelah exclude-list diterapkan &mdash;
-    periksa apakah exclude-list terlalu luas.
-  </div>
+  {% if tier.comment_count == 0 %}
+  <div class="empty-state">Tidak ada komentar tanpa tipe akun teridentifikasi.</div>
   {% else %}
 
-  <div class="cards">
-    <div class="card">
-      <div class="number">{{ total_videos }}</div>
-      <div class="label">Video</div>
-    </div>
-    <div class="card">
-      <div class="number">{{ total_comments_analyzed }}</div>
-      <div class="label">Komentar dianalisis</div>
-    </div>
-    <div class="card">
-      <div class="number">{{ overall_summary.comment_vs_reply.comment }}</div>
-      <div class="label">Komentar utama</div>
-    </div>
-    <div class="card">
-      <div class="number">{{ overall_summary.comment_vs_reply.reply }}</div>
-      <div class="label">Reply</div>
-    </div>
-    <div class="card">
-      <div class="number">{{ total_comments_excluded_internal }}</div>
-      <div class="label">Dikecualikan</div>
-    </div>
-    <div class="card">
-      <div class="number">{{ llm_escalation_pct }}%</div>
-      <div class="label">Eskalasi ke LLM</div>
-    </div>
-  </div>
-
-  {% if overall_summary.by_tier %}
-  <h2>Ringkasan per Account Type</h2>
-  <div class="section">
-    <table>
-      <tr><th>Account Type</th><th>Video</th><th>Komentar</th></tr>
-      {% for tier in overall_summary.by_tier %}
-      <tr><td>{{ tier.label }}</td><td>{{ tier.video_count }}</td><td>{{ tier.comment_count }}</td></tr>
-      {% endfor %}
-    </table>
-  </div>
-
-  <h2>Distribusi Komentar vs Reply</h2>
-  <div class="section">
-    <div class="stacked-bar">
-      <div class="seg comment" style="width: {{ overall_summary.comment_vs_reply.comment_pct }}%"></div>
-      <div class="seg reply" style="width: {{ overall_summary.comment_vs_reply.reply_pct }}%"></div>
-    </div>
-    <div class="legend">
-      <span><span class="dot comment"></span>Komentar utama {{ overall_summary.comment_vs_reply.comment }} ({{ overall_summary.comment_vs_reply.comment_pct }}%)</span>
-      <span><span class="dot reply"></span>Reply {{ overall_summary.comment_vs_reply.reply }} ({{ overall_summary.comment_vs_reply.reply_pct }}%)</span>
-    </div>
-  </div>
-
-  <h2>Distribusi Sentimen per Account Type</h2>
-  <div class="section">
-    {% for tier in tier_breakdown %}
-    <div class="tier-row">
-      <div class="tier-row-label">
-        <span class="name">{{ tier.label }}</span>
-        <span class="n">{{ tier.total_count }} komentar+reply</span>
-      </div>
-      <div class="stacked-bar">
-        <div class="seg positif" style="width: {{ tier.sentiment_summary.positif_pct }}%"></div>
-        <div class="seg negatif" style="width: {{ tier.sentiment_summary.negatif_pct }}%"></div>
-        <div class="seg netral" style="width: {{ tier.sentiment_summary.netral_pct }}%"></div>
-      </div>
-    </div>
+  <div class="cols2">
+   <div class="panel">
+    <h3 class="tight">Komposisi sentimen</h3>
+    {{ tier.composition_bar }}
+    <table><thead><tr><th>Label</th><th class="num">Jumlah</th><th class="num">%</th></tr></thead>
+    <tbody>
+     <tr><td>Positif</td><td class="num">{{ tier.sentiment_counts.positif }}</td><td class="num">{{ tier.sentiment_pct.positif_pct }}%</td></tr>
+     <tr><td>Negatif</td><td class="num">{{ tier.sentiment_counts.negatif }}</td><td class="num">{{ tier.sentiment_pct.negatif_pct }}%</td></tr>
+     <tr><td>Netral</td><td class="num">{{ tier.sentiment_counts.netral }}</td><td class="num">{{ tier.sentiment_pct.netral_pct }}%</td></tr>
+     <tr><td>Tidak terklasifikasi</td><td class="num">{{ tier.sentiment_counts.tidak_terklasifikasi }}</td><td class="num">{{ tier.sentiment_pct.unclassified_pct }}%</td></tr>
+    </tbody></table>
+   </div>
+   <div class="panel">
+    <h3 class="tight">Tema dominan</h3>
+    <table class="tier-themes"><thead><tr><th>Tema</th><th class="num">Komentar</th><th class="num">%</th></tr></thead>
+    <tbody>
+    {% for theme in tier.themes %}
+     <tr><td{% if theme.count == 0 %} class="theme-empty"{% endif %}>{{ theme.label }}</td>
+     <td class="num">{{ theme.count }}</td><td class="num">{{ theme.share_pct }}%</td></tr>
     {% endfor %}
-    <div class="legend">
-      <span><span class="dot positif"></span>Positif</span>
-      <span><span class="dot negatif"></span>Negatif</span>
-      <span><span class="dot netral"></span>Netral</span>
-    </div>
+    </tbody></table>
+   </div>
   </div>
+
+  <h3>Kata paling khas dibanding tipe akun lain</h3>
+  <div class="panel panel-kw">{{ tier.keywords_bar }}</div>
+
+  <h3>Contoh komentar</h3>
+  {% if tier.examples_short %}
+  <p class="note">Hanya {{ tier.examples|length }} komentar tersedia untuk tipe akun ini.</p>
   {% endif %}
-
-  <h2>Distribusi Sentimen (Keseluruhan)</h2>
-  <div class="bar-row">
-    <div class="bar-label">Positif</div>
-    <div class="bar-track"><div class="bar-fill positif" style="width: {{ sentiment_summary.positif_pct }}%"></div></div>
-    <div class="bar-value">{{ sentiment_summary.positif }} ({{ sentiment_summary.positif_pct }}%)</div>
-  </div>
-  <div class="bar-row">
-    <div class="bar-label">Negatif</div>
-    <div class="bar-track"><div class="bar-fill negatif" style="width: {{ sentiment_summary.negatif_pct }}%"></div></div>
-    <div class="bar-value">{{ sentiment_summary.negatif }} ({{ sentiment_summary.negatif_pct }}%)</div>
-  </div>
-  <div class="bar-row">
-    <div class="bar-label">Netral</div>
-    <div class="bar-track"><div class="bar-fill netral" style="width: {{ sentiment_summary.netral_pct }}%"></div></div>
-    <div class="bar-value">{{ sentiment_summary.netral }} ({{ sentiment_summary.netral_pct }}%)</div>
-  </div>
-
-  <h2>Messaging &mdash; Top Keyword Keseluruhan</h2>
-  <table>
-    <tr><th>Kata/Frasa</th><th>Jumlah Kemunculan</th></tr>
-    {% for item in top_keywords_overall %}
-    <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
-    {% endfor %}
-  </table>
-
-  <h2>Messaging per Sentimen</h2>
-  <div class="keyword-columns">
-    <div>
-      <h3>Positif</h3>
-      <table>
-        {% for item in top_keywords_by_sentiment.positif %}
-        <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
-        {% endfor %}
-      </table>
-    </div>
-    <div>
-      <h3>Negatif</h3>
-      <table>
-        {% for item in top_keywords_by_sentiment.negatif %}
-        <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
-        {% endfor %}
-      </table>
-    </div>
-    <div>
-      <h3>Netral</h3>
-      <table>
-        {% for item in top_keywords_by_sentiment.netral %}
-        <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
-        {% endfor %}
-      </table>
-    </div>
-  </div>
-
-  <h2>Contoh Komentar Representatif</h2>
-  {% for label, quotes in sample_quotes.items() %}
-    <h3>{{ label|capitalize }}</h3>
-    {% for quote in quotes %}
-    <div class="quote-card {{ label }}">
-      <div class="quote-username">{{ quote.masked_username }}</div>
-      <div>{{ quote.text_raw }}</div>
-    </div>
-    {% endfor %}
+  {% for c in tier.examples %}
+  <blockquote class="q q-{{ 'unk' if c.sentiment_label == 'tidak_terklasifikasi' else c.sentiment_label }}">
+   <p>{{ c.text_raw|truncate(260) }}</p>
+   <footer>{{ c.username }} &middot; {{ c.digg_count }} suka &middot; {{ c.create_time }}</footer>
+  </blockquote>
   {% endfor %}
 
-  {% for tier in tier_breakdown %}
-  <div class="tier-section">
-    <h2>{{ tier.label }} <span class="tier-badge">{{ tier.video_count }} video</span></h2>
-
-    <div class="mini-cards">
-      <div class="mini-card">
-        <div class="number">{{ tier.total_count }}</div>
-        <div class="label">Total komentar + reply</div>
-      </div>
-      <div class="mini-card">
-        <div class="number">{{ tier.comment_count }}</div>
-        <div class="label">Komentar utama</div>
-      </div>
-      <div class="mini-card">
-        <div class="number">{{ tier.reply_count }}</div>
-        <div class="label">Reply</div>
-      </div>
-      <div class="mini-card">
-        <div class="number">{{ tier.meaningful_count }} ({{ tier.meaningful_pct }}%)</div>
-        <div class="label">Bermakna</div>
-      </div>
-      <div class="mini-card">
-        <div class="number">{{ tier.noise_count }} ({{ tier.noise_pct }}%)</div>
-        <div class="label">Reaksi / noise</div>
-      </div>
-    </div>
-
-    <h3>Sentimen</h3>
-    <div class="bar-row">
-      <div class="bar-label">Positif</div>
-      <div class="bar-track"><div class="bar-fill positif" style="width: {{ tier.sentiment_summary.positif_pct }}%"></div></div>
-      <div class="bar-value">{{ tier.sentiment_summary.positif }} ({{ tier.sentiment_summary.positif_pct }}%)</div>
-    </div>
-    <div class="bar-row">
-      <div class="bar-label">Negatif</div>
-      <div class="bar-track"><div class="bar-fill negatif" style="width: {{ tier.sentiment_summary.negatif_pct }}%"></div></div>
-      <div class="bar-value">{{ tier.sentiment_summary.negatif }} ({{ tier.sentiment_summary.negatif_pct }}%)</div>
-    </div>
-    <div class="bar-row">
-      <div class="bar-label">Netral</div>
-      <div class="bar-track"><div class="bar-fill netral" style="width: {{ tier.sentiment_summary.netral_pct }}%"></div></div>
-      <div class="bar-value">{{ tier.sentiment_summary.netral }} ({{ tier.sentiment_summary.netral_pct }}%)</div>
-    </div>
-
-    <h3>Keyword Dominan per Sentimen</h3>
-    <div class="keyword-columns">
-      <div>
-        <h4>Positif</h4>
-        <table>
-          {% for item in tier.top_keywords_by_sentiment.get('positif', []) %}
-          <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
-          {% endfor %}
-        </table>
-      </div>
-      <div>
-        <h4>Negatif</h4>
-        <table>
-          {% for item in tier.top_keywords_by_sentiment.get('negatif', []) %}
-          <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
-          {% endfor %}
-        </table>
-      </div>
-      <div>
-        <h4>Netral</h4>
-        <table>
-          {% for item in tier.top_keywords_by_sentiment.get('netral', []) %}
-          <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
-          {% endfor %}
-        </table>
-      </div>
-    </div>
-
-    <h3>Kata yang Sering Muncul</h3>
-    <table>
-      <tr><th>Kata</th><th>Jumlah</th></tr>
-      {% for item in tier.top_words %}
-      <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
-      {% endfor %}
-    </table>
-
-    <h3>Tema Dominan</h3>
-    {% if tier.top_themes %}
-    <div class="theme-chips">
-      {% for item in tier.top_themes %}
-      <span class="theme-chip">{{ item.theme }} <span class="n">&times;{{ item.count }}</span></span>
-      {% endfor %}
-    </div>
-    {% else %}
-    <div class="empty-state">Belum ada tema yang cukup sering berulang di tier ini.</div>
-    {% endif %}
+  <h3>Insight</h3>
+  <div class="finds">
+   {% for item in tier.narrative %}
+   <div class="find"><div class="i">{{ '%02d' % loop.index }}</div><div><h4>{{ item.title }}</h4><p>{{ item.body }}</p></div></div>
+   {% endfor %}
   </div>
+
+  {% endif %}
+ </div>
+ {% endfor %}
+</section>
+
+<section id="risiko">
+ <h2><span class="no">03</span>Yang bisa membuat angka ini salah</h2>
+ <p class="sub">Laporan sentimen paling sering gagal bukan karena grafiknya jelek, melainkan karena
+ pembacanya tidak tahu apa yang tidak terhitung.</p>
+ <div class="finds">
+  {% for item in metrics.narrative.risk %}
+  <div class="find find-warn"><div class="i">{{ '%02d' % loop.index }}</div><div><h4>{{ item.title }}</h4><p>{{ item.body }}</p></div></div>
   {% endfor %}
+ </div>
+</section>
 
-  {% if excluded_accounts_detected %}
-  <h2>Transparansi Data &mdash; Top Pengirim Komentar</h2>
-  <table>
-    <tr><th>Username</th><th>Total Muncul</th><th>Status</th></tr>
-    {% for account in excluded_accounts_detected %}
-    <tr><td>{{ account.username }}</td><td>{{ account.total_muncul }}</td><td>{{ account.alasan }}</td></tr>
-    {% endfor %}
-  </table>
-  {% endif %}
+<section id="aksi">
+ <h2><span class="no">04</span>Yang perlu dikerjakan</h2>
+ <div class="finds">
+  {% for item in metrics.narrative.actions %}
+  <div class="find find-act"><div class="i">{{ '%02d' % loop.index }}</div><div><h4>{{ item.title }}</h4><p>{{ item.body }}</p></div></div>
+  {% endfor %}
+ </div>
+</section>
 
-  {% endif %}
+<section id="tren">
+ <h2><span class="no">05</span>Tren volume dan sentimen</h2>
+ <p class="sub">Batang = jumlah komentar per bulan (bagian merah muda = porsi negatif). Garis = net
+ sentimen pada skala &minus;100 sampai +100. Bulan dengan kurang dari {{ min_month_volume }} komentar
+ dibuang agar persentasenya tidak menyesatkan. Setiap bulan dihitung sendiri-sendiri &mdash; tidak ada
+ angka gabungan beberapa bulan di laporan ini, karena menggabungkan bisa menyembunyikan pembalikan arah.</p>
+ <div class="panel">{{ charts.trend }}</div>
+</section>
 
-  <div class="methodology">
-    <strong>Metodologi &amp; Limitasi:</strong>
-    Sentimen diklasifikasikan dengan metode hybrid: lexicon sebagai pass pertama,
-    eskalasi ke LLM untuk komentar ambigu. Rasio eskalasi ke LLM pada run ini:
-    {{ llm_escalation_pct }}% ({{ sentiment_method_breakdown.llm }} dari
-    {{ total_comments_analyzed }} komentar).
-    {% if sentiment_method_breakdown.llm_failed > 0 %}
-    <strong>Peringatan:</strong> {{ sentiment_method_breakdown.llm_failed }} komentar
-    gagal diklasifikasikan LLM dan berstatus "tidak_terklasifikasi".
-    {% endif %}
-    Limitasi: komentar berbentuk pertanyaan tetap diklasifikasikan sentimen apa
-    adanya (biasanya netral), bukan dikategorikan terpisah sebagai pertanyaan.
+<section id="kata-pembeda">
+ <h2><span class="no">06</span>Kata paling khas tiap sentimen</h2>
+ <p class="sub">Bukan kata yang paling sering, melainkan kata yang paling <em>khas</em> untuk satu label
+ (log-odds terboboti Jeffreys terhadap seluruh korpus &mdash; pendekatan sederhana, bukan metode Monroe
+ dkk. yang lebih rumit). Kata umum muncul di mana-mana sehingga tidak informatif; kata di bawah ini
+ justru membedakan. Kata negasi (tidak, bukan, belum, jangan) tidak pernah dibuang dari perhitungan ini.</p>
+ <div class="cols3">
+  <div class="panel"><h3 class="tight kw-heading-neg">Penanda negatif</h3>{{ charts.keywords_negatif }}</div>
+  <div class="panel"><h3 class="tight kw-heading-pos">Penanda positif</h3>{{ charts.keywords_positif }}</div>
+  <div class="panel"><h3 class="tight kw-heading-neu">Penanda netral</h3>{{ charts.keywords_netral }}</div>
+ </div>
+</section>
+
+<section id="video">
+ <h2><span class="no">07</span>Video mana yang bekerja, mana yang tidak</h2>
+ <p class="sub">Hanya video dengan minimal {{ min_video_comments }} komentar terklasifikasi yang
+ diperingkat ({{ metrics.video_leaderboard.eligible_count }} dari {{ metrics.video_leaderboard.total_count }}
+ video), supaya satu-dua komentar tidak menciptakan juara atau pecundang palsu. Median net sentimen video:
+ <b class="mono">{{ '%+.0f' % metrics.video_leaderboard.median_net }}</b>.</p>
+
+ <h3>Net sentimen terendah &mdash; audit dulu</h3>
+ <table><thead><tr><th>Video</th><th class="num">Komentar</th><th>Komposisi</th><th class="num">Net</th></tr></thead>
+ <tbody>
+ {% for video in metrics.video_leaderboard.worst %}
+ <tr><td class="cap"><span>{{ video.caption|truncate(110) }}</span><small>{{ video.video_id }}</small></td>
+ <td class="num">{{ video.total }}</td><td class="bar-cell">{{ video.bar }}</td>
+ <td class="num {{ 'net-neg' if video.net < 0 else ('net-pos' if video.net >= 40 else 'net-mid') }}">{{ '%+.0f' % video.net }}</td></tr>
+ {% endfor %}
+ </tbody></table>
+
+ <h3>Net sentimen tertinggi &mdash; jadikan template</h3>
+ <table><thead><tr><th>Video</th><th class="num">Komentar</th><th>Komposisi</th><th class="num">Net</th></tr></thead>
+ <tbody>
+ {% for video in metrics.video_leaderboard.best %}
+ <tr><td class="cap"><span>{{ video.caption|truncate(110) }}</span><small>{{ video.video_id }}</small></td>
+ <td class="num">{{ video.total }}</td><td class="bar-cell">{{ video.bar }}</td>
+ <td class="num {{ 'net-neg' if video.net < 0 else ('net-pos' if video.net >= 40 else 'net-mid') }}">{{ '%+.0f' % video.net }}</td></tr>
+ {% endfor %}
+ </tbody></table>
+
+ <h3>Volume komentar terbesar &mdash; jangkauan terbesar</h3>
+ <table><thead><tr><th>Video</th><th class="num">Komentar</th><th>Komposisi</th><th class="num">Net</th></tr></thead>
+ <tbody>
+ {% for video in metrics.video_leaderboard.loudest %}
+ <tr><td class="cap"><span>{{ video.caption|truncate(110) }}</span><small>{{ video.video_id }}</small></td>
+ <td class="num">{{ video.total }}</td><td class="bar-cell">{{ video.bar }}</td>
+ <td class="num {{ 'net-neg' if video.net < 0 else ('net-pos' if video.net >= 40 else 'net-mid') }}">{{ '%+.0f' % video.net }}</td></tr>
+ {% endfor %}
+ </tbody></table>
+</section>
+
+<section id="suara">
+ <h2><span class="no">08</span>Suara yang paling nyaring</h2>
+ <p class="sub">Satu komentar dengan banyak like tidak setara dengan satu komentar tanpa like &mdash;
+ bagian ini menimbang komentar berdasarkan interaksi, bukan jumlah baris.</p>
+ <div class="cols2">
+  <div class="panel">
+   <h3 class="tight">Komentar negatif dengan interaksi tertinggi</h3>
+   {% for c in metrics.top_comments.negatif %}
+   <blockquote class="q q-negatif"><p>{{ c.text_raw|truncate(260) }}</p>
+   <footer>{{ c.digg_count }} suka &middot; {{ c.create_time }} &middot; {{ c.sentiment_method }}</footer></blockquote>
+   {% endfor %}
   </div>
-</main>
+  <div class="panel">
+   <h3 class="tight">Komentar positif dengan interaksi tertinggi</h3>
+   {% for c in metrics.top_comments.positif %}
+   <blockquote class="q q-positif"><p>{{ c.text_raw|truncate(260) }}</p>
+   <footer>{{ c.digg_count }} suka &middot; {{ c.create_time }} &middot; {{ c.sentiment_method }}</footer></blockquote>
+   {% endfor %}
+  </div>
+ </div>
+ <p class="note">
+   Tiap komentar bernilai sama: net {{ '%+.1f' % metrics.net_overall }}. Ditimbang jumlah like:
+   net {{ '%+.1f' % metrics.engagement.net_by_likes }}. Ditimbang like tanpa 10 komentar teratas:
+   net {{ '%+.1f' % metrics.engagement.net_by_likes_trimmed }} &mdash; 10 komentar teratas menyerap
+   {{ metrics.engagement.top10_like_share_pct }}% dari seluruh like yang terkumpul.
+ </p>
+</section>
+
+<section id="kualitas-data">
+ <h2><span class="no">09</span>Kualitas data</h2>
+ <table><thead><tr><th>Mesin</th><th class="num">Komentar</th></tr></thead><tbody>
+ {% for method, count in metrics.data_quality.method_breakdown.items() %}
+ <tr><td>{{ method }}</td><td class="num">{{ count }}</td></tr>
+ {% endfor %}
+ </tbody></table>
+
+ {% if excluded_accounts_detected %}
+ <h3>Transparansi Data &mdash; Top Pengirim Komentar</h3>
+ <table>
+   <tr><th>Username</th><th>Total Muncul</th><th>Status</th></tr>
+   {% for account in excluded_accounts_detected %}
+   <tr><td>{{ account.username }}</td><td>{{ account.total_muncul }}</td><td>{{ account.alasan }}</td></tr>
+   {% endfor %}
+ </table>
+ {% endif %}
+
+ <div class="methodology">
+   <strong>Metodologi &amp; Limitasi:</strong>
+   Sentimen diklasifikasikan dengan metode hybrid: model lokal sebagai pass pertama,
+   eskalasi ke LLM untuk komentar ambigu. Rasio eskalasi ke LLM pada run ini:
+   {{ llm_escalation_pct }}% ({{ sentiment_method_breakdown.llm }} dari
+   {{ total_comments_analyzed }} komentar). Kegagalan jalur LLM:
+   {{ metrics.data_quality.llm_failure_pct }}% dari trafik LLM.
+   {% if sentiment_method_breakdown.llm_failed > 0 %}
+   <strong>Peringatan:</strong> {{ sentiment_method_breakdown.llm_failed }} komentar
+   gagal diklasifikasikan LLM dan berstatus "tidak_terklasifikasi".
+   {% endif %}
+   Limitasi: komentar berbentuk pertanyaan tetap diklasifikasikan sentimen apa
+   adanya (biasanya netral), bukan dikategorikan terpisah sebagai pertanyaan.
+   Narasi di laporan ini dihasilkan dari format string atas metrik di atas,
+   bukan oleh model bahasa.
+ </div>
+</section>
+
+<section id="jelajah">
+ <h2><span class="no">10</span>Jelajahi komentar</h2>
+ <p class="sub">Sampel {{ metrics.explorer_rows|length }} komentar (dari maksimum
+ {{ explorer_row_cap }}): setiap label sentimen mendapat jatah minimum agar sampel ini tidak bisa
+ terlihat 100% negatif secara struktural, sisa slot diisi dengan komentar negatif/tak terklasifikasi
+ yang tersisa, lalu komentar berinteraksi tertinggi, lalu sampel acak. Cari kata untuk memverifikasi
+ sendiri klaim mana pun di laporan ini. Filter dan pencarian di bawah adalah peningkatan opsional
+ (JavaScript) &mdash; tanpanya, seluruh baris tetap terbaca sebagai daftar biasa.</p>
+ <div class="controls">
+  <input type="search" id="jelajah-search" placeholder="Cari kata, misalnya: harga, efek, umur&hellip;" aria-label="Cari komentar">
+  <span id="jelajah-filter" role="group" aria-label="Filter sentimen">
+   <button type="button" class="chip" data-filter="all" aria-pressed="true">Semua</button>
+   <button type="button" class="chip" data-filter="positif" aria-pressed="false">Positif</button>
+   <button type="button" class="chip" data-filter="negatif" aria-pressed="false">Negatif</button>
+   <button type="button" class="chip" data-filter="netral" aria-pressed="false">Netral</button>
+   <button type="button" class="chip" data-filter="tidak_terklasifikasi" aria-pressed="false">Tak terklasifikasi</button>
+  </span>
+  <span id="jelajah-count"></span>
+ </div>
+ <div id="jelajah-rows">
+   {% for row in metrics.explorer_rows %}
+   <div class="explorer-row" data-sentiment="{{ row.sentiment_label }}">
+     <span class="tag tag-{{ row.sentiment_label }}">{{ row.sentiment_label }}</span>
+     <div>{{ row.text_raw }}</div>
+     <div class="m">{{ row.digg_count }} suka<br>{{ row.create_time }}</div>
+   </div>
+   {% endfor %}
+   <p id="jelajah-empty" class="empty-state" hidden>Tidak ada komentar yang cocok dengan filter ini.</p>
+ </div>
+ <p class="note">Diurutkan menurun berdasarkan jumlah like.</p>
+</section>
+
+{% endif %}
+
+<footer class="end">
+ Sumber: {{ source_file }}{% if run_id %} &middot; Run {{ run_id }}{% endif %} &middot; Dibuat {{ generated_at }}<br>
+ Berkas ini mandiri: tanpa koneksi internet, tanpa pelacak.
+</footer>
+
+</div>
+<script>
+(function () {
+  var rows = document.querySelectorAll('#jelajah-rows .explorer-row');
+  var buttons = document.querySelectorAll('#jelajah-filter .chip');
+  var search = document.getElementById('jelajah-search');
+  var count = document.getElementById('jelajah-count');
+  var empty = document.getElementById('jelajah-empty');
+  if (!rows.length || !buttons.length) { return; }
+  var filter = 'all';
+
+  function apply() {
+    var query = (search && search.value ? search.value : '').trim().toLowerCase();
+    var visible = 0;
+    rows.forEach(function (row) {
+      var matchesFilter = filter === 'all' || row.getAttribute('data-sentiment') === filter;
+      var matchesQuery = !query || row.textContent.toLowerCase().indexOf(query) !== -1;
+      var show = matchesFilter && matchesQuery;
+      row.hidden = !show;
+      if (show) { visible += 1; }
+    });
+    if (empty) { empty.hidden = visible !== 0; }
+    if (count) { count.textContent = visible + ' dari ' + rows.length + ' komentar cocok'; }
+  }
+
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      buttons.forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+      button.setAttribute('aria-pressed', 'true');
+      filter = button.getAttribute('data-filter');
+      apply();
+    });
+  });
+  if (search) { search.addEventListener('input', apply); }
+  apply();
+})();
+</script>
 </body>
 </html>
