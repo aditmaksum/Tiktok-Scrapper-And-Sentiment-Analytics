@@ -1,0 +1,119 @@
+[
+  {
+    "aweme_id": "7100000000000000001",
+    "caption": "Review produk vitamin anak #parentingtips #anaksehat",
+    "video_url": "https://t.tiktok.com/i18n/share/video/7100000000000000001/",
+    "video_author_username": "brandcare_official",
+    "total_collected": 12,
+    "comments": [
+      {
+        "comment_id": "7200000000000000001",
+        "username": "user_satu",
+        "nickname": "Ibu Satu",
+        "comment": "bagus banget, anak jadi lebih semangat makan",
+        "create_time": "2026-08-01T09:15:00",
+        "avatar": "https://example.com/avatar1.jpg",
+        "digg_count": 12,
+        "total_reply": 1,
+        "replies": [
+          {
+            "comment_id": "7200000000000000002",
+            "username": "brandcare_official",
+            "nickname": "Brand Care",
+            "comment": "terima kasih ya, semoga sehat selalu",
+            "create_time": "2026-08-01T10:00:00",
+            "avatar": "https://example.com/avatar2.jpg",
+            "digg_count": 0,
+            "total_reply": 0
+          }
+        ]
+      },
+      {
+        "comment_id": "7200000000000000003",
+        "username": "user_dua",
+        "nickname": "Papa Dua",
+        "comment": "berapa kali sehari dikasihnya kak",
+        "create_time": "2026-08-01T11:30:00",
+        "avatar": "https://example.com/avatar3.jpg",
+        "digg_count": 3,
+        "total_reply": 0,
+        "replies": []
+      },
+      {
+        "comment_id": "7200000000000000004",
+        "username": "user_tiga",
+        "nickname": "Bunda Tiga",
+        "comment": "jelek, gak ngefek sama sekali, nyesel beli",
+        "create_time": "2026-08-01T12:00:00",
+        "avatar": "https://example.com/avatar4.jpg",
+        "digg_count": 5,
+        "total_reply": 0,
+        "replies": []
+      },
+      {
+        "comment_id": "7200000000000000005",
+        "username": "user_empat",
+        "nickname": "Empat",
+        "comment": "🥰🥰🥰",
+        "create_time": "2026-08-01T12:30:00",
+        "avatar": "https://example.com/avatar5.jpg",
+        "digg_count": 1,
+        "total_reply": 0,
+        "replies": []
+      },
+      {
+        "comment_id": "7200000000000000006",
+        "username": "user_lima",
+        "nickname": "Lima",
+        "comment": "tidak kecewa sama sekali, worth it",
+        "create_time": "2026-08-01T13:00:00",
+        "avatar": "https://example.com/avatar6.jpg",
+        "digg_count": 8,
+        "total_reply": 0,
+        "replies": []
+      }
+    ]
+  },
+  {
+    "aweme_id": "7100000000000000002",
+    "caption": "Testimoni pelanggan minggu ini",
+    "video_url": "https://t.tiktok.com/i18n/share/video/7100000000000000002/",
+    "video_author_username": "",
+    "total_collected": 6,
+    "comments": [
+      {
+        "comment_id": "7200000000000000007",
+        "username": "user_enam",
+        "nickname": "Enam",
+        "comment": "harga segini worth banget sih kualitasnya",
+        "create_time": "2026-08-02T09:00:00",
+        "avatar": "https://example.com/avatar7.jpg",
+        "digg_count": 4,
+        "total_reply": 0,
+        "replies": []
+      },
+      {
+        "comment_id": "7200000000000000008",
+        "username": "user_tujuh",
+        "nickname": "Tujuh",
+        "comment": "kemasannya rusak pas sampai, packing kurang aman",
+        "create_time": "2026-08-02T09:30:00",
+        "avatar": "https://example.com/avatar8.jpg",
+        "digg_count": 2,
+        "total_reply": 0,
+        "replies": []
+      },
+      {
+        "comment_id": "7200000000000000009",
+        "username": "user_delapan",
+        "nickname": "Delapan",
+        "comment": "ada varian rasa lain gak kak",
+        "create_time": "2026-08-02T10:00:00",
+        "avatar": "https://example.com/avatar9.jpg",
+        "digg_count": 0,
+        "total_reply": 0,
+        "replies": []
+      }
+    ]
+  }
+]

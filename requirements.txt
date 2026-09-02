@@ -1,7 +1,8 @@
 Requests==2.31.0
-click==8.1.8
+click==8.5.0
 jmespath==1.0.1
 loguru==0.7.3
+python-dotenv==1.2.3
 
 # sosmed_sentiment (added /plan-eng-review 2026-08-30)
 Sastrawi==1.0.1
@@ -9,3 +10,12 @@ scikit-learn==1.9.0
 Jinja2==3.1.6
 openai==3.6.0
 PyYAML==6.0.3
+
+# sosmed_sentiment sentiment model cascade (Approach C, /office-hours 2026-08-30):
+# deliberate departure from this repo's "stay light" convention - see
+# docs/Architecture.md §2 and docs/designs/sentiment-model-cascade.md for why.
+# The model weights themselves are pinned separately in
+# sosmed_sentiment/sentiment/model_classifier.py:MODEL_REVISION, not here -
+# pip has no way to pin a HuggingFace model revision.
+torch==2.13.0
+transformers==5.16.1

@@ -4,6 +4,13 @@ from typing import Any, Dict, List
 
 SENTIMENT_LABELS: tuple = ('positif', 'negatif', 'netral', 'tidak_terklasifikasi')
 
+# autoplan Eng HIGH #2 (2026-08-30): this used to hardcode {'lexicon': ...} only,
+# so a run using any other sentiment_method silently reported 0 for it. Known
+# methods are zero-filled so the report template's .get() calls stay reliable,
+# then whatever the run actually produced is merged on top - an unrecognized
+# future method name still surfaces instead of vanishing.
+KNOWN_SENTIMENT_METHODS: tuple = ('model', 'model_failed', 'llm', 'llm_failed', 'lexicon')
+
 
 def _pct(
     count: int,
@@ -91,9 +98,8 @@ def build_analysis_result(
             'total_comments_excluded_internal': excluded_internal,
             'total_comments_analyzed': len(comments),
             'sentiment_method_breakdown': {
-                'lexicon': method_counts.get('lexicon', 0),
-                'llm': method_counts.get('llm', 0),
-                'llm_failed': method_counts.get('llm_failed', 0)
+                **{method: 0 for method in KNOWN_SENTIMENT_METHODS},
+                **method_counts
             },
             'config_used': config_used
         },

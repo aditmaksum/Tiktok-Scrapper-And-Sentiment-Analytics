@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Versi** | 0.4 |
+| **Versi** | 0.5 |
 | **Tanggal** | 2026-08-30 |
 | **Status** | Draf |
 | **Sumber** | `PRD.md` v0.1, `Architecture.md` v0.1, contoh nyata `comments.json` |
@@ -93,13 +93,12 @@ Field `text_clean`, `tokens_stemmed`, `emoji_found`, `sentiment_*` ditambahkan s
     "total_comments_raw": integer,           // termasuk reply, sebelum exclude
     "total_comments_excluded_internal": integer,
     "total_comments_analyzed": integer,      // raw - excluded - gagal ingest (kalau ada)
-    "sentiment_method_breakdown": { "lexicon": integer, "llm": integer, "llm_failed": integer },
+    "sentiment_method_breakdown": { "model": integer, "model_failed": integer, "llm": integer, "llm_failed": integer, "lexicon": integer },
     "config_used": {
-      "lexicon_version": string,
+      "model_version": string,               // REVISI 0.5, gantiin lexicon_version - "nama_model@revisi_pendek"
       "llm_base_url": string,                // endpoint router yg dipakai (NFR-03: telusuri run pakai config apa), bukan API key
       "llm_model": string,
-      "ambiguous_threshold_score": float,
-      "ambiguous_threshold_oov_ratio": float,
+      "ambiguous_confidence_threshold": float | null, // REVISI 0.5, gantiin ambiguous_threshold_score + ambiguous_threshold_oov_ratio (model cuma punya satu sinyal confidence, bukan skor+OOV). null kalau LLM_MODEL/LLM_API_KEY gak diisi (mode model-only) - gak ada threshold eskalasi yang dipakai karena gak ada eskalasi
       "exclude_config_file": string
     }
   },
@@ -137,7 +136,7 @@ Field `text_clean`, `tokens_stemmed`, `emoji_found`, `sentiment_*` ditambahkan s
       "emoji_found": [string],
       "sentiment_label": "positif" | "negatif" | "netral" | "tidak_terklasifikasi",
       "sentiment_confidence": float,
-      "sentiment_method": "lexicon" | "llm" | "llm_failed",
+      "sentiment_method": "model" | "model_failed" | "llm" | "llm_failed",
       "create_time": string,
       "digg_count": integer
     }
@@ -156,7 +155,7 @@ Field `text_clean`, `tokens_stemmed`, `emoji_found`, `sentiment_*` ditambahkan s
 | Enum | Nilai | Dipakai di |
 |---|---|---|
 | sentiment_label | `positif`, `negatif`, `netral`, `tidak_terklasifikasi` | `comments[].sentiment_label`, `sentiment_summary` |
-| sentiment_method | `lexicon`, `llm`, `llm_failed` | `comments[].sentiment_method`, `meta.sentiment_method_breakdown` |
+| sentiment_method | `model`, `model_failed`, `llm`, `llm_failed` (`lexicon` masih ada di enum untuk kompatibilitas run lama, tidak diproduksi lagi sejak revisi 0.5) | `comments[].sentiment_method`, `meta.sentiment_method_breakdown` |
 | exclude_reason | `internal_account` (manual, FR-02), `video_uploader` (auto, FR-11) | field internal komentar setelah flatten (§3), `excluded_accounts_detected[].alasan`. **Presedensi kalau match keduanya:** cek `video_uploader` (FR-11) dulu — sinyalnya lebih pasti (identitas video, bukan daftar manual) |
 
 Tidak ada transisi status (data ini hasil klasifikasi satu kali per run, bukan entitas yang berubah status seiring waktu).
@@ -183,6 +182,7 @@ Tidak relevan dalam arti migrasi database, tapi berlaku prinsip yang sama untuk 
 ## Riwayat Perubahan
 | Tanggal | Versi | Perubahan |
 |---|---|---|
+| 2026-08-30 | 0.5 | Lapis pertama klasifikasi hybrid ganti dari lexicon jadi model lokal (Approach C, `docs/designs/sentiment-model-cascade.md`) — `sentiment_method` enum `lexicon`→`model`/`model_failed` (breaking, tidak backward-compatible penuh: field lama tidak dihapus dari enum tapi tidak diproduksi lagi), `meta.config_used.lexicon_version`→`model_version`, `ambiguous_threshold_score`+`ambiguous_threshold_oov_ratio`→`ambiguous_confidence_threshold` tunggal. Sengaja melanggar §7 "field lama tidak dihapus langsung" untuk `config_used` karena bentuk sinyalnya (skor+OOV vs confidence tunggal) tidak punya pemetaan 1:1 yang jujur |
 | 2026-08-30 | 0.4 | Klarifikasi sumber `video_author_username`: kolom CSV input scraper (`nama_pengguna_kreator`), bukan panggilan API TikTok baru — mengikuti Architecture.md 0.4. Struktur field tidak berubah dari 0.3 |
 | 2026-08-30 | 0.3 | Tambah `video_author_username` (opsional, nullable) ke skema input `comments.json`, dan `exclude_reason` enum value `video_uploader` — mengikuti Architecture.md 0.3 (ADR-03 revisi, FR-11). Field opsional & nullable karena scraper belum mengisi field ini per tanggal revisi — field lama tidak dihapus, sesuai §7 Strategi "Migrasi" |
 | 2026-08-30 | 0.2 | Tambah `meta.config_used.llm_base_url` (opsional, field baru) mengikuti perubahan Architecture.md 0.2 (LLM provider-agnostic via router) — field lama tidak dihapus, sesuai §7 Strategi "Migrasi" |

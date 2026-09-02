@@ -1,0 +1,20 @@
+# Calibrated against the Tahap B 200-comment labeled sample
+# (local/labeling_sample_labeled.xlsx, answer key mirrored to
+# config/calibration/tahap-b-labels.csv) via scripts/calibrate_threshold.py.
+#
+# Model: mdhugol/indonesia-bert-sentiment-classification
+# Raw model accuracy (no escalation): 71.0% (142/200) - below the 80% G-08 target.
+#
+# Threshold sweep (escalate below threshold to the LLM):
+#   0.90 -> kept-accuracy 80.0%, 32% escalated  (exactly at target, no margin)
+#   0.95 -> kept-accuracy 81.9%, 48% escalated  (chosen: real margin above target)
+#   0.99 -> kept-accuracy 85.7%, 76% escalated  (more accurate, but escalates
+#           most of the batch - LLM cost is trivial at this volume
+#           (~$0.13-$2.90/month per Architecture.md §9) so this was considered
+#           and rejected only because 0.95 already clears the gate with margin
+#           at meaningfully lower escalation volume)
+#
+# 0.90 was rejected despite technically passing: a single mislabeled comment
+# in the 200-sample would drop it below 80%, and the sample itself is small
+# enough that +/-1 comment is real noise, not a rounding artifact.
+ambiguous_confidence_threshold: 0.95

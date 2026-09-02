@@ -1,31 +1,37 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import yaml
 
-from loguru import logger
-
-from sosmed_sentiment.sentiment.hybrid import (
-    DEFAULT_AMBIGUOUS_THRESHOLD_OOV_RATIO, DEFAULT_AMBIGUOUS_THRESHOLD_SCORE
-)
+CONFIG_KEY: str = 'ambiguous_confidence_threshold'
 
 
 def load_threshold_config(
     path: Optional[str]
-) -> Tuple[float, float]:
-    """(threshold_score, threshold_oov_ratio), Rules.md §6 default-config pattern.
+) -> float:
+    """ambiguous_confidence_threshold, calibrated against the Tahap B labeled sample.
 
-    Both values are explicitly flagged in PRD.md §9 as uncalibrated defaults
-    - this is where an analyst overrides them after reviewing a real run's
-    escalation ratio, without editing code.
+    Unlike Rules.md §6's usual "load config with a built-in default" pattern,
+    this one has NO fallback number in code. docs/designs/sentiment-model-cascade.md
+    (Reviewer Concerns) explicitly rejects a placeholder threshold - two earlier
+    written assumptions in this project (a Sastrawi per-token cache, an
+    LLM-is-expensive cost estimate) turned out wrong once actually measured, so a
+    guessed number here risks the same failure mode, silently, forever, if nobody
+    re-calibrates it. Run scripts/calibrate_threshold.py against a labeled sample
+    and pass its output explicitly.
     """
     if not path:
-        logger.info('no threshold config given, pakai default bawaan')
-        return DEFAULT_AMBIGUOUS_THRESHOLD_SCORE, DEFAULT_AMBIGUOUS_THRESHOLD_OOV_RATIO
+        raise ValueError(
+            'ambiguous_confidence_threshold belum dikalibrasi. Jalankan '
+            'scripts/calibrate_threshold.py terhadap sampel Tahap B, lalu tunjuk '
+            '--threshold-config ke hasilnya (mis. config/thresholds.yaml). Tidak ada '
+            'angka default ditulis di kode - lihat docs/designs/sentiment-model-cascade.md, '
+            'bagian Reviewer Concerns.'
+        )
 
     with open(path, encoding='utf-8') as handle:
         data = yaml.safe_load(handle) or {}
 
-    return (
-        float(data.get('ambiguous_threshold_score', DEFAULT_AMBIGUOUS_THRESHOLD_SCORE)),
-        float(data.get('ambiguous_threshold_oov_ratio', DEFAULT_AMBIGUOUS_THRESHOLD_OOV_RATIO))
-    )
+    if CONFIG_KEY not in data:
+        raise ValueError('%s: key %r tidak ditemukan' % (path, CONFIG_KEY))
+
+    return float(data[CONFIG_KEY])

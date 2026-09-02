@@ -1,0 +1,201 @@
+comment_id,sentiment_label,notes
+'7569145789650584327,netral,"Cuma sebut angka, gak ada nada jelas"
+'7577758600274182919,netral,"Komentar ambigu soal bau madu, gak jelas suka atau komplain"
+'7508632572789342983,netral,"Info dosis dari dokter, gak ada opini"
+'7655335493744542480,positif,"Testimoni anak jadi banyak kosa kata, pakai emoji hati"
+'7617589743614477064,netral,"Reaksi ke isi video, gak nyinggung produk"
+'7663331169446593300,positif,Pujian ke anak di video
+'7591658583260644117,netral,"Cerita kondisi anak, mau konsultasi dokter, netral informatif"
+'7569193598986846997,positif,Puji konten video
+'7664155128039277328,netral,Nanya boleh gak buat anak SMP
+'7656000932978901777,positif,"Bilang rasa enak, anak gampang terima"
+'7576311559568655122,netral,"Cerita hasil naik turun, minta solusi, campur aduk"
+'7624788583522796306,netral,"Cerita cara checkout aman, gak nilai produk"
+'7592143724319490824,netral,Nanya perlu ke dokter THT
+'7579106430667326215,negatif,"Nuduh brand cuma cari untung, gak pedulikan anak sakit"
+'7530465707692786440,positif,Ucapan terima kasih atas info
+'7660131822474412821,positif,Puji manfaat produk
+'7517475323781317383,netral,Info batas usia pakai
+'7653386721656455957,netral,"Ajakan saling dukung, gak spesifik produk"
+'7654923878951863058,netral,Nanya batas usia
+'7574637096167654162,positif,Emoji cinta doang
+'7663774713193431826,netral,"Nyatakan preferensi pribadi, netral"
+'7594350822864782087,netral,Info cara pakai varian warna
+'7617776930403009287,positif,"Klaim produk nambah daya ingat, positif"
+'7667815404392383253,netral,"Saran hindari teh/kopi, netral"
+'7648099942045926145,positif,Emoji cinta doang
+'7532763598738604807,netral,Nanya soal anak hiperaktif
+'7622093853768975124,netral,Nanya proses pesan
+'7469991188663075591,netral,Nanya frekuensi minum
+'7678274001441702672,negatif,"Kaget produk ternyata bubuk bukan cair, sedikit kecewa ekspektasi"
+'7463157094239240978,netral,"Nanya campur air, sebut anak muntah, ada kekhawatiran"
+'7617023794277106433,positif,Ekspresi semangat pakai emoji
+'7629632440398775061,netral,"Cerita salah beli kemasan dewasa, netral"
+'7655953046757589781,positif,"Niat coba buat anak, positif"
+'7650386968182620949,positif,"Puji rasa, anak suka disuapin"
+'7553179557365383944,negatif,Keluhan sudah 2 botol tapi gak ada efek
+'7575776874388308744,negatif,"Emoji nangis doang, nada sedih/negatif"
+'7615376557842121493,positif,Ucapan terima kasih
+'7570216043689018120,negatif,Keluhan beli produk palsu
+'7641778420510294791,netral,"Nanya apakah review jujur, skeptis netral"
+'7478144226104754999,netral,Nanya takaran
+'7654585432508973844,positif,"Testimoni nilai anak naik, positif"
+'7576156549447533313,netral,"Jawaban singkat setuju, netral"
+'7622219138128478977,netral,"Bela kejujuran orang lain, netral"
+'7529378271857820434,netral,Jawaban brand jelasin variasi respon anak
+'7526807103001903873,netral,"Emoji tawa doang, gak jelas konteks"
+'7633620313595446024,positif,Puji singkat
+'7568848293204263701,netral,"Cerita sifat anak pasif, netral"
+'7451455256078697223,positif,Puji produk 'the best'
+'7679009415882621717,netral,Kalimat gak jelas maksudnya
+'7655596119665558279,netral,"Ajakan follow-followan, gak nyinggung produk"
+'7404689576512406278,netral,Info dari brand soal usia pakai
+'7658943215441494800,netral,"Jawab boleh dijarak sama obat, info"
+'7613290842653377300,netral,Info sudah checkout
+'7568002570641523476,positif,"Ekspresi bahagia sambil doa, testimoni positif"
+'7634838236394013460,netral,Info usia minimal pakai
+'7515425270071165703,positif,"Baru tau info, kasih emoji semangat"
+'7547283927637033735,netral,Nanya boleh gak untuk usia segitu
+'7559365565098246929,netral,Nanya aman buat gigi
+'7657770335673041671,netral,"Curhat senasib, minta tips, ada kekhawatiran ringan"
+'7608488654160036625,netral,Info jadwal minum
+'7560895874935603976,positif,Testimoni bagus setelah 2 botol
+'7533544516675388178,positif,Ucapan terima kasih info
+'7503521669693063956,netral,Nanya aturan minum
+'7491223445046461202,netral,Jawaban singkat netral
+'7670058126415135509,netral,Nanya frekuensi minum
+'7573540674441478928,netral,"Nanya asal kota dan usia, basa-basi"
+'7626213056414565136,netral,Info batas usia
+'7555152692679770898,netral,"Testimoni campur, ada progres tapi makan masih sulit"
+'7524571544870437633,netral,Info dosis
+'7414391486723162885,netral,Nanya bisa buat usia 20 th
+'7654583767721362197,positif,Tertarik beli buat keponakan susah makan
+'7655952642347172628,positif,Testimoni rutin minum cocok
+'7656073474285519624,netral,Info soal usia bisa minum
+'7567328057971720976,positif,"Emoji api, ekspresi antusias positif"
+'7612325741087212296,netral,"Cerita masalah makan anak, nanya solusi"
+'7623540991383094024,netral,Klarifikasi bukan pengganti susu formula
+'7598794102881485569,netral,Info takaran ada di kemasan
+'7609197628308144897,netral,"Jawaban boleh, netral"
+'7622244568348492565,netral,Nanya varian produk susu
+'7559239192900928274,netral,Nanya penanganan kalau gak cocok
+'7581755120837886728,netral,Nanya takaran usia 1 th
+'7604035813215912725,netral,"Ekspresi doa, netral"
+'7591091187735003920,netral,Jawaban singkat
+'7467839584971408136,netral,"Arahan hubungi CS/live, info dari brand"
+'7661037879158784788,positif,"Niat beli, positif"
+'7443242884554064648,netral,"Cerita anak belum bisa bicara, netral"
+'7585122278871909137,netral,Info bisa untuk usia 2 th
+'7650394718728176405,netral,Nanya solusi kalau anak gak suka
+'7613288693939471120,netral,Jawaban singkat boleh
+'7623701697164198676,netral,Nanya dosis ml dan frekuensi
+'7665505638986384146,netral,"Nanya soal efek samping, ada kekhawatiran tapi bentuk pertanyaan"
+'7638975951527363329,netral,Ekspresi doa
+'7676017768663237396,netral,Nanya waktu minum
+'7497644167092683527,netral,Nanya kombinasi produk
+'7574003479393436434,netral,"Cerita kebiasaan nonton anak, gak terkait produk"
+'7655217656638833426,netral,"Ajakan follow-like-share, spam promosi"
+'7492590228340359943,netral,Nanya takaran usia 5 th
+'7623655821587137288,netral,Info cara pesan cepat
+'7587742077226074887,netral,"Cerita speech delay anak, netral"
+'7667054139947795217,netral,Jawab warna produk
+'7652003560725365524,negatif,"Kecewa respon penjual, nilai gak ada harapan buat pembeli"
+'7655986496381928212,positif,Puji produk bikin anak doyan makan
+'7629020379621688080,netral,"Penjelasan soal BAB normal, menenangkan"
+'7451741819040727813,positif,Puji produk bagus
+'7596684057275466513,netral,"Saran tambahan stimulasi anak, netral"
+'7632502520333763346,negatif,"Keluhan 4 box habis tapi biasa aja, gak ada efek"
+'7655938752225919762,netral,"Nanya rasa, sebut anak pemilih"
+'7493728373466759954,netral,Saran coba varian lain
+'7667104167526138645,netral,Info jumlah beli
+'7634336142246757141,netral,Nanya rasa produk
+'7614102368378979090,positif,Puji dapat produk asli kental
+'7410622202692272902,positif,Ucapan terima kasih dari brand ke customer
+'7586905775584035600,netral,"Emoji canggung, gak jelas konteks"
+'7655939361565459221,positif,Suka banget konsumsi produk
+'7665140977213145874,netral,"Nanya rasa bikin eneg, netral/kekhawatiran ringan"
+'7659000646767280917,positif,Puji kandungan nutrisi tinggi
+'7676363868667347713,netral,Emoji tawa doang
+'7664614123276124949,netral,Nanya boleh diselang dgn susu formula lain
+'7625634862438925073,negatif,"Keluhan anak muntah tiap minum, minta alternatif"
+'7591843601497654037,positif,Ucapan terima kasih paham penjelasan
+'7622694808268636944,negatif,Keluhan 5 botol habis tanpa perubahan
+'7615095631354741520,negatif,"Ragu efektivitas, anak masih belum bisa baca"
+'7564580230603621136,netral,Jawaban boleh asal dosis sesuai
+'7529375352151425810,netral,"Bingung waktu minum yang benar, netral"
+'7528616182774629121,netral,Info dosis
+'7649209145224495890,positif,"Testimoni antusias, jadi pelanggan tetap"
+'7637079440098476818,netral,Nanya varian rasa coklat
+'7577170262827844360,netral,Nanya kombinasi produk
+'7581091801998557953,netral,Jawaban singkat boleh
+'7557876361609610002,positif,Emoji cinta
+'7665612238967243538,positif,Setuju dengan komentar sebelumnya
+'7655939546061079317,positif,Niat coba buat keponakan susah makan
+'7624182313346073361,positif,Ucapan terima kasih info
+'7561658748751889153,netral,Jawaban singkat
+'7624071740528165653,positif,Jawaban positif bisa banget
+'7617016497697260306,negatif,"Cerita sedih dibully guru, curhat emosional negatif"
+'7552356663257285383,netral,Nanya wajar gak anak baru bicara kalau disuruh
+'7675619037786981137,netral,Jawaban singkat boleh
+'7549102814959174401,netral,Kalimat gak lengkap/gak jelas
+'7515944116850377493,netral,Nanya boleh usia 11 bulan
+'7559054263214015239,netral,"Nanya campur susu, anak susah minum"
+'7527540002734473985,negatif,Nada argumentatif/kesal ke lawan bicara
+'7658625573170807569,positif,Ucapan terima kasih pakai emoji jempol
+'7678597758470718226,netral,"Minta kontak WhatsApp, netral"
+'7663856348790981397,netral,Cerita anak masih cadel
+'7545963551920931592,netral,"Nanya frekuensi, khawatir anak belum bicara"
+'7631463767696147221,netral,Cerita anak 5 th belum bicara
+'7567298353982391061,netral,Nanya progres perkembangan
+'7663836952956830480,netral,Nanya cara minum
+'7623644547336536848,netral,Jawaban singkat boleh
+'7485187183231091476,netral,Nanya boleh usia 1 th
+'7486026976064471826,positif,"Doa semoga cocok, ramah"
+'7563252348505539335,netral,Nanya soal sekolah anak
+'7611952998571377409,netral,"Jelasin cara antisipasi produk palsu, netral"
+'7578884516422189831,netral,Nanya bisa usia 1 th
+'7660060898500821780,netral,"Nunggu promo, netral"
+'7634202644881687312,netral,Info dosis berdasar usia
+'7597881249201849106,netral,Nanya usia 4 th
+'7525538007971054353,netral,Skeptis nanya beneran sebagus itu
+'7665352031796544263,netral,"Cerita anak sulit fokus dan pelupa, curhat"
+'7594003646477779732,netral,"Setuju konten video, netral"
+'7666342174245667602,netral,Nanya varian susu
+'7624786148539712264,netral,"Sebut pakai produk lain (kompetitor), netral"
+'7516824719305442066,netral,Nanya kombinasi 2 produk
+'7516145389835092754,negatif,"Khawatir dibanding-bandingkan, nada negatif"
+'7641666535941620500,netral,Nanya usia minimal
+'7605817265662133013,positif,Ucapan terima kasih atas penjelasan
+'7572502421671592711,netral,Nanya usia pakai
+'7480842885533909768,netral,Nanya waktu minum
+'7530461438638310162,netral,Nanya waktu minum
+'7664986166400533268,positif,Ucapan terima kasih
+'7663882000243458824,netral,"Cerita kebiasaan gigit jari anak, netral"
+'7646299107599172373,netral,Nanya ketersediaan produk
+'7579170881047773972,netral,Nanya takaran
+'7554669550026507015,netral,Nanya kombinasi produk lain
+'7569556961508950801,positif,Emoji senyum
+'7626369869408289554,netral,"Nanya cara campur, anak nolak minum langsung"
+'7669792187958199047,negatif,Keluhan sakit perut setelah minum
+'7624017954578187026,positif,"Ekspresi gemas, positif"
+'7502735991523115794,netral,Nanya waktu minum sebelum tidur
+'7663494796829737749,negatif,Komplain harga beli lebih mahal dari yang lain
+'7562549826153906960,netral,Jawaban warna produk
+'7515625400706499348,netral,Nanya bisa untuk dewasa
+'7624714435022652167,netral,"Cerita kemampuan bicara anak terbatas, netral"
+'7668954660732896018,netral,Nanya varian usia 10 th
+'7609283514869826312,negatif,"Khawatir BAB cair 5x sehari, konteks negatif"
+'7428228619442766597,netral,Nanya dosis usia 5 th
+'7526409993056109329,netral,Jawab warna produk
+'7446706139721106194,netral,Info usia pakai dari brand
+'7631541387406508821,netral,"Minta kemasan lebih besar, netral"
+'7655997104581591828,positif,"Setuju sama komentar sebelumnya, positif"
+'7549059633588405008,netral,Info harga beli
+'7524744837104812801,negatif,Kesal beda hasil antara anak pertama-kedua dan ketiga
+'7630740634126566151,netral,Nanya frekuensi minum
+'7643376120406377234,netral,"Arahan brand ke CS, netral"
+'7632366203415954193,netral,Jawaban singkat boleh
+'7563493782974432001,netral,"Sama dgn komentar 106, saran netral"
+'7590977737416180498,netral,Info usia pakai dari brand
+'7538371169600553736,netral,Nanya bisa dipakai anak yang belum bicara
+'7628425614105903893,positif,Emoji cinta doang

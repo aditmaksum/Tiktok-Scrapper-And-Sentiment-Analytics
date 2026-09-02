@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Versi** | 0.4 |
+| **Versi** | 0.5 |
 | **Tanggal** | 2026-08-30 |
 | **Status** | Draf |
 | **Sumber** | `PRD.md` v0.1 |
@@ -31,8 +31,8 @@ Dua skrip CLI berdiri sendiri (bukan layanan/server), dijalankan berurutan secar
 | Lapisan | Pilihan | Versi | Alasan |
 |---|---|---|---|
 | Bahasa | Python | 3.12 | Ekosistem NLP Bahasa Indonesia (Sastrawi, dsb.) paling lengkap di Python; kedua modul tidak butuh keunggulan bahasa lain |
-| Stemming | `Sastrawi` (nama paket PyPI-nya, bukan "PySastrawi") | 1.0.1 | Library stemming Bahasa Indonesia paling umum dipakai di studi/produksi lokal. **Catatan performa (implementasi):** pure-Python, lambat per-panggilan — di-cache per token unik (`functools.lru_cache`) di `preprocessing/stemming.py`, lihat §10 |
-| Lexicon sentimen | InSet Lexicon (atau lexicon Indonesia setara) — **implementasi awal pakai starter lexicon ~25 kata di kode** (`sentiment/lexicon_classifier.py: STARTER_LEXICON`), BUKAN InSet asli (butuh sumber terpisah, lihat PRD §9 ASUMSI) | — | Lexicon Indonesia yang tersedia publik untuk pass pertama klasifikasi hybrid |
+| Stemming | `Sastrawi` (nama paket PyPI-nya, bukan "PySastrawi") | 1.0.1 | Library stemming Bahasa Indonesia paling umum dipakai di studi/produksi lokal. **Catatan performa (koreksi 0.5, verified langsung ke kode):** dokumen versi sebelumnya bilang ada `functools.lru_cache` per-token — TIDAK ADA di `preprocessing/stemming.py`, itu keliru (docstring modulnya sendiri mencatat cache per-token sempat dicoba lalu ditolak karena vocabulary informal terlalu luas buat cache efektif). Yang benar: `stem()` dipanggil SEKALI per komentar (semua token digabung jadi satu string), bukan per token — itu yang mengurangi overhead pemanggilan. Lihat §10 |
+| Model sentimen lokal (revisi 0.5, menggantikan lexicon) | `mdhugol/indonesia-bert-sentiment-classification` (IndoBERT, HuggingFace, pinned ke commit `80ccb4c`) — pass pertama klasifikasi hybrid, gantiin `lexicon_classifier.py` sepenuhnya | `torch` 2.13.0 + `transformers` 5.16.1 (~600MB, departure sadar dari konvensi "stay light" repo ini — lihat catatan di bawah) | **Diputuskan lewat pengukuran langsung, bukan model card**: `/autoplan` review (2026-08-30) nemuin bug negasi fatal di rencana kamus InSet (`tidak bagus` → positif confidence 1.0). Model pretrained diuji langsung terhadap sampel 200 komentar berlabel (Tahap B): kandidat pertama (`w11wo/indonesian-roberta-base-sentiment-classifier`) cuma 53,5% akurasi (kalah dari baseline tebak-netral 69%, bias sistemik ke "negatif" buat teks santai/emoji-only — SmSA training data-nya review aplikasi formal, bukan komentar TikTok santai). Diganti ke `mdhugol/...` setelah dibandingkan langsung (`scripts/compare_models.py`): 71,0% akurasi mentah, dan lolos gate 80% (81,9%, threshold eskalasi 0,95, lihat `config/thresholds.yaml`) setelah lapis eskalasi LLM dihitung. `sentiment/lexicon_classifier.py` ditinggal di kode (tidak dihapus, buat referensi) tapi TIDAK dipanggil lagi di `cli.analyze` |
 | Ekstraksi keyword | scikit-learn (`TfidfVectorizer` + `CountVectorizer`) | 1.9.0 | Sudah teruji, cukup untuk TF-IDF unigram+bigram tanpa perlu implementasi manual |
 | LLM eskalasi | Client OpenAI-compatible (`base_url` configurable — mis. OpenRouter atau router lain) | `openai` python SDK terbaru stabil, dipakai dgn `base_url` custom | Direvisi dari draf awal (Anthropic API spesifik) di sesi /office-hours 2026-08-30: user butuh provider-agnostic karena akses LLM lewat router pihak ketiga, bukan Anthropic langsung. Kontrak prompt tidak berubah, hanya client & konfigurasi endpoint |
 | Templating laporan | Jinja2 | terbaru stabil | Memisahkan struktur HTML dari logika Python, memudahkan siapa pun mengubah tampilan tanpa menyentuh Modul 1 |
@@ -53,18 +53,18 @@ Dua skrip CLI berdiri sendiri (bukan layanan/server), dijalankan berurutan secar
 - **Keputusan:** B.
 - **Konsekuensi:** Lebih mudah — bisa regenerasi laporan tanpa mengulang NLP yang mahal (termasuk biaya LLM), bisa ganti implementasi salah satu modul tanpa menyentuh yang lain, hasil antara bisa diperiksa manual (debugging lebih mudah). Lebih sulit — ada file perantara yang harus dijaga skemanya tetap kompatibel (`Schema.md` jadi kontrak yang harus dipatuhi kedua sisi); perlu disiplin versi skema kalau berubah nanti.
 
-### ADR-02 — Sentimen hybrid: lexicon dulu, LLM hanya untuk kasus ambigu
+### ADR-02 — Sentimen hybrid: lexicon dulu, LLM hanya untuk kasus ambigu (REVISI 0.5: lexicon → model lokal)
 - **Konteks:** Keputusan user: hybrid, bukan lexicon murni atau LLM murni.
 - **Pilihan yang dipertimbangkan:**
   - A. Lexicon murni — cepat & murah, tapi coverage rendah untuk slang TikTok dan tidak menangkap sarkasme/konteks.
   - B. LLM murni — akurat untuk nuansa, tapi mahal & lambat untuk ribuan komentar per run.
-  - C. Hybrid — lexicon untuk mayoritas kasus jelas, LLM hanya untuk kasus ambigu.
-- **Keputusan:** C.
-- **Konsekuensi:** Biaya API terkendali (hanya subset yang dieskalasi), tapi butuh logika tambahan untuk mendefinisikan "ambigu" (lihat threshold di bawah) dan hasil akhir gabungan dua metode punya karakteristik confidence yang berbeda-beda — harus ditandai (`sentiment_method`) di output supaya transparan saat dianalisis lebih lanjut.
-- **Aturan eskalasi default (bisa diubah lewat config, perlu dikalibrasi dengan data nyata sebelum dipakai produksi):**
-  - Komentar dieskalasi ke LLM jika: skor absolut lexicon berada dalam zona netral sempit (default: `-0.15` s.d. `0.15` pada skala lexicon yang dinormalisasi ke `-1..1`), **atau** lebih dari 50% token hasil stemming tidak ditemukan di lexicon (out-of-vocabulary).
-  - Komentar dengan skor jelas di luar zona itu langsung diberi label dari lexicon, tanpa panggilan API.
-  - > **ASUMSI:** Angka `0.15` dan `50%` di atas adalah nilai awal yang masuk akal secara umum, bukan hasil kalibrasi terhadap data ini. Wajib direview setelah run pertama terhadap sampel data nyata sebelum dipakai untuk laporan final.
+  - C. Hybrid — lapis murah untuk mayoritas kasus jelas, LLM hanya untuk kasus ambigu.
+- **Keputusan:** C. Bentuk cascade-nya tetap (lapis murah → eskalasi LLM), tapi lapis murahnya **direvisi 2026-08-30** dari kamus lexicon jadi model klasifikasi lokal — lihat `docs/designs/sentiment-model-cascade.md` (APPROVED) untuk kronologi lengkap kenapa (bug negasi di rencana InSet-lexicon, lalu dua kandidat model diuji langsung terhadap data nyata sebelum salah satu dipilih).
+- **Konsekuensi:** Biaya API terkendali (hanya subset yang dieskalasi), tapi butuh logika tambahan untuk mendefinisikan "ambigu" dan hasil akhir gabungan dua metode punya karakteristik confidence yang berbeda-beda — harus ditandai (`sentiment_method`) di output supaya transparan saat dianalisis lebih lanjut. Konsekuensi baru dari revisi 0.5: `torch`+`transformers` (~600MB) jadi dependency baru, departure sadar dari konvensi "stay light" repo ini — diterima karena bug negasi di lexicon terbukti fatal dan biaya LLM murni yang tadinya dianggap mahal ternyata di bawah $3/bulan di skala ini (jadi bukan LLM murni yang dihindari, tapi lapis murahnya perlu akurat).
+- **Aturan eskalasi (revisi 0.5 — signature `is_ambiguous()` berubah dari `(score, oov_ratio)` jadi `confidence` tunggal, model tidak punya konsep OOV):**
+  - Komentar dieskalasi ke LLM kalau `sentiment_confidence` model < `ambiguous_confidence_threshold`.
+  - **Tidak ada angka default ditulis di kode** — nilai ini WAJIB dikalibrasi terhadap sampel berlabel (Tahap B) lewat `scripts/calibrate_threshold.py`, ditulis ke `config/thresholds.yaml`, dan dipassing eksplisit lewat `--threshold-config`. Alasan: dua asumsi tertulis sebelumnya di proyek ini (cache Sastrawi, estimasi biaya LLM) sama-sama terbukti salah pas akhirnya diukur — jadi tidak ada placeholder angka lagi.
+  - Nilai terkalibrasi saat ini (model `mdhugol/indonesia-bert-sentiment-classification`, sampel 200 komentar 2026-08-30): `0.95` → 81,9% akurasi lapisan model, 48% komentar dieskalasi. Detail penuh (kenapa bukan 0.90 yang secara teknis udah lolos target) ada di `config/thresholds.yaml`.
 
 ### ADR-03 — Exclude-list akun internal: manual untuk pola perilaku, otomatis khusus akun pengunggah video
 - **Konteks:** Ditemukan akun brand/admin (`dokterrizkimrd`, `yayleindonesia`, `yaylesupport`) mendominasi balasan pada data contoh.
@@ -92,9 +92,9 @@ Dua skrip CLI berdiri sendiri (bukan layanan/server), dijalankan berurutan secar
 | `ingest.tiktok_adapter` | Baca & flatten `comments.json` sesuai skema TikTok | FR-01 | — |
 | `filters.exclude_accounts` | Buang komentar dari akun di exclude-list (manual) DAN dari akun pengunggah video kalau `video_author_username` tersedia (FR-11); hitung frekuensi kemunculan akun untuk `excluded_accounts_detected` | FR-02, FR-10, FR-11 | `ingest.*` |
 | `preprocessing.pipeline` | Jalankan cleaning→normalizing→case folding→tokenizing→filtering→stemming berurutan | FR-03 | `filters.exclude_accounts` |
-| `sentiment.lexicon_classifier` | Skor & label sentimen berbasis lexicon | FR-04 | `preprocessing.pipeline` |
-| `sentiment.llm_classifier` | Klasifikasi via LLM API (router OpenAI-compatible) untuk kasus ambigu | FR-04 | `sentiment.lexicon_classifier` (hasil skor untuk deteksi ambigu) |
-| `sentiment.hybrid` | Orkestrasi keputusan lexicon vs LLM per komentar | FR-04 | `sentiment.lexicon_classifier`, `sentiment.llm_classifier` |
+| `sentiment.model_classifier` (revisi 0.5, gantiin `sentiment.lexicon_classifier`) | Label & confidence sentimen dari model lokal (`text_raw` langsung, tanpa preprocessing 7-tahap — model punya tokenizer subword sendiri) | FR-04 | `transformers` |
+| `sentiment.llm_classifier` | Klasifikasi via LLM API (router OpenAI-compatible) untuk kasus ambigu | FR-04 | `sentiment.model_classifier` (confidence untuk deteksi ambigu) |
+| `sentiment.hybrid` | Orkestrasi keputusan model vs LLM per komentar | FR-04 | `sentiment.model_classifier`, `sentiment.llm_classifier` |
 | `keywords.tfidf_extractor` | Hitung top keyword keseluruhan & per label sentimen | FR-05 | `preprocessing.pipeline`, `sentiment.hybrid` |
 | `output.serializer` | Rakit & simpan `analysis_result.json` | FR-06 | seluruh komponen Modul 1 di atas |
 | `cli.analyze` | Entry point Modul 1, parsing argumen, orkestrasi keseluruhan alur | FR-01–FR-06, FR-08, FR-09 | seluruh komponen Modul 1 |
@@ -123,8 +123,10 @@ tiktok-comment-scrapper/          # repo yang sudah ada
 │   │   ├── filtering.py
 │   │   └── stemming.py
 │   ├── sentiment/
-│   │   ├── lexicon_classifier.py
+│   │   ├── lexicon_classifier.py   # revisi 0.5: ditinggal, TIDAK dipanggil cli.analyze lagi
+│   │   ├── model_classifier.py     # BARU 0.5 — gantiin lexicon_classifier di jalur produksi
 │   │   ├── llm_classifier.py
+│   │   ├── threshold_config.py
 │   │   └── hybrid.py
 │   ├── keywords/
 │   │   └── tfidf_extractor.py
@@ -143,7 +145,7 @@ tiktok-comment-scrapper/          # repo yang sudah ada
 │   └── stopwords_custom.txt
 ├── tests/                          # sudah ada — tests sentimen ditambah di sini, mirror struktur sosmed_sentiment/
 ├── .env.example                    # BARU (repo belum punya file ini, `.env` sudah di .gitignore) — LLM_API_KEY/LLM_BASE_URL/LLM_MODEL kosong
-└── requirements.txt                # sudah ada — ditambah scikit-learn, PySastrawi, jinja2, openai
+└── requirements.txt                # sudah ada — ditambah scikit-learn, Sastrawi, jinja2, openai, torch, transformers
 ```
 
 ## 6. Kontrak "API" (CLI, bukan HTTP)
@@ -179,17 +181,18 @@ Tidak relevan — tidak ada login atau multi-role. Satu-satunya "kredensial" ada
 ## 9. Integrasi Eksternal
 | Layanan | Fungsi | Cara autentikasi | Perilaku saat layanan mati |
 |---|---|---|---|
-| LLM API (via router, OpenAI-compatible) | Klasifikasi sentimen untuk komentar ambigu | API key via env var `LLM_API_KEY`, endpoint via `LLM_BASE_URL` | Retry 2x lalu tandai komentar `tidak_terklasifikasi`, run tetap lanjut (lihat §8); tidak memblokir komentar yang sudah selesai lewat lexicon |
+| LLM API (via router, OpenAI-compatible) | Klasifikasi sentimen untuk komentar ambigu | API key via env var `LLM_API_KEY`, endpoint via `LLM_BASE_URL` | Retry 2x lalu tandai komentar `tidak_terklasifikasi`, run tetap lanjut (lihat §8); tidak memblokir komentar yang sudah selesai lewat model lokal |
+| HuggingFace Hub | Unduhan model sentimen lokal (`mdhugol/indonesia-bert-sentiment-classification`, ~500MB, sekali per mesin lalu dari cache lokal) | Tidak butuh auth (model publik) | Load gagal (no internet, HF down) → `ModelLoadError` fatal SEBELUM komentar manapun diproses (exit 2), rerun begitu internet hidup lanjut normal tanpa kehilangan data — tidak ada fallback offline (risiko diterima secara eksplisit, lihat `docs/plans/2026-08-30-model-cascade-implementation.md`) |
 
 ## 10. Pemenuhan Kebutuhan Non-Fungsional
 | NFR | Cara dipenuhi arsitektur |
 |---|---|
 | NFR-01 (skala ±10.000 komentar) | Pemrosesan berbasis iterasi/batch, bukan memuat seluruh transformasi ke memori sekaligus untuk tahap yang berat |
 | NFR-02 (biaya LLM terkendali) | ADR-02: eskalasi hanya untuk kasus ambigu; FR-09 dry-run menghitung estimasi sebelum panggilan sungguhan |
-| NFR-03 (reproducibility) | Lexicon & preprocessing deterministik (tidak ada randomness); versi lexicon & model LLM dicatat di `meta` output JSON supaya bisa ditelusuri run mana pakai konfigurasi apa |
+| NFR-03 (reproducibility) | Model sentimen lokal & preprocessing deterministik (tidak ada randomness); model dipin ke commit HuggingFace spesifik (`model_classifier.py:MODEL_REVISION`, bukan `main` — update bobot upstream tidak mengubah hasil diam-diam); versi model & model LLM dicatat di `meta.config_used` output JSON supaya bisa ditelusuri run mana pakai konfigurasi apa |
 | NFR-04 (laporan portabel offline) | ADR-04: HTML statis, CSS inline dalam file yang sama, font fallback ke system font kalau tidak ada internet |
 | NFR-05 (observability) | Setiap komponen di §4 mencatat jumlah data masuk/keluar ke log terstruktur (lihat `Rules.md` §7) |
-| NFR-06 (Bahasa Indonesia) | Lexicon, stopword custom, dan stemmer (Sastrawi) semuanya ditargetkan untuk Bahasa Indonesia informal |
+| NFR-06 (Bahasa Indonesia) | Model sentimen lokal (fine-tuned di korpus Bahasa Indonesia), stopword custom, dan stemmer (Sastrawi, dipakai jalur keyword extraction) semuanya ditargetkan untuk Bahasa Indonesia informal |
 
 ## 11. Lingkungan & Deploy
 Tidak ada lingkungan staging/produksi — dijalankan langsung dari lingkungan lokal analis (satu lingkungan: lokal).

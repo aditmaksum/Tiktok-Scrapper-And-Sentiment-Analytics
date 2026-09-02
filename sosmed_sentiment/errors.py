@@ -18,5 +18,23 @@ class LLMCallError(PipelineError):
     """
 
 
+class ModelLoadError(PipelineError):
+    """The local sentiment model failed to load (no internet, HF down, disk, etc).
+
+    Always fatal (exit 2) - raised once at process start, before any comment
+    is processed, so a failed load means zero work is lost and a rerun once
+    the underlying issue is fixed resumes cleanly.
+    """
+
+
+class ModelClassifyError(PipelineError):
+    """A single comment's local-model classification call failed.
+
+    Never fatal by itself - sentiment.hybrid catches this per comment and
+    falls through to LLM escalation instead of stopping the batch, the same
+    isolation LLMCallError already gives the LLM layer.
+    """
+
+
 class ReportBuildError(PipelineError):
     """The HTML report could not be assembled from a schema-valid JSON."""

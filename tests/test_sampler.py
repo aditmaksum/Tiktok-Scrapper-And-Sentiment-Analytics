@@ -366,7 +366,7 @@ class TestRunSample:
             written = list(csv.DictReader(handle))
 
         assert len(written) == 100
-        assert set(written[0]) == {'url_or_id', 'account_type'}
+        assert set(written[0]) == {'url_or_id', 'account_type', 'creator_username'}
 
         # The output has to survive the reader on the other side.
         from tiktokcomment.runner import read_rows

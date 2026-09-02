@@ -47,9 +47,9 @@ def test_excluded_count_is_raw_minus_analyzed():
     assert result['meta']['total_comments_excluded_internal'] == 4
 
 
-def test_method_breakdown_counts_each_method():
+def test_method_breakdown_counts_each_known_method():
     comments = [
-        comment('1', 'v1', 'positif', method='lexicon'),
+        comment('1', 'v1', 'positif', method='model'),
         comment('2', 'v1', 'negatif', method='llm'),
         comment('3', 'v1', 'tidak_terklasifikasi', method='llm_failed')
     ]
@@ -61,8 +61,22 @@ def test_method_breakdown_counts_each_method():
     )
 
     assert result['meta']['sentiment_method_breakdown'] == {
-        'lexicon': 1, 'llm': 1, 'llm_failed': 1
+        'model': 1, 'model_failed': 0, 'llm': 1, 'llm_failed': 1, 'lexicon': 0
     }
+
+
+def test_method_breakdown_does_not_drop_an_unrecognized_method():
+    # autoplan Eng HIGH #2 regression: a method outside the known set must
+    # still surface in the breakdown, not silently read as 0.
+    comments = [comment('1', 'v1', 'positif', method='some_future_method')]
+
+    result = build_analysis_result(
+        run_id='r1', source_file='comments.json', total_comments_raw=1,
+        comments=comments, top_keywords_overall=[], top_keywords_by_sentiment={},
+        config_used={}
+    )
+
+    assert result['meta']['sentiment_method_breakdown']['some_future_method'] == 1
 
 
 def test_per_video_groups_correctly():

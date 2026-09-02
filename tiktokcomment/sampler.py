@@ -34,7 +34,7 @@ DEFAULT_QUOTA: Tuple[int, int, int] = (50, 30, 20)
 # between videos and the reply requests inside each one.
 SECONDS_PER_VIDEO: int = 123
 
-CSV_FIELDS: Tuple[str, ...] = ('url_or_id', 'account_type')
+CSV_FIELDS: Tuple[str, ...] = ('url_or_id', 'account_type', 'creator_username')
 
 def classify_tier(
     account_type: str
@@ -275,7 +275,8 @@ def write_sample(
             for row in rows:
                 writer.writerow({
                     'url_or_id': safe_cell(row.aweme_id),
-                    'account_type': safe_cell(row.account_type)
+                    'account_type': safe_cell(row.account_type),
+                    'creator_username': safe_cell(row.creator_username)
                 })
     except OSError as error:
         raise ScrapeError('cannot write %s (%s)' % (output_csv, error))

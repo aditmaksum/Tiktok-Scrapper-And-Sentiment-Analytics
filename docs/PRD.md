@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Versi** | 0.5 |
+| **Versi** | 0.6 |
 | **Tanggal** | 2026-08-30 |
 | **Status** | Draf |
 | **Sumber** | Diskusi 30 Agustus 2026 + file `comments.json` (200 video TikTok, 6.158 komentar+balasan) |
@@ -36,7 +36,7 @@ Dua kebutuhan ini (hitung sentimen, susun laporan) sengaja dipisah jadi dua alat
 - Ingest data komentar dari file JSON berformat hasil scraping TikTok (struktur `video → comments[] → replies[]`, sesuai `comments.json`).
 - Filter akun internal/brand dari data sebelum dianalisis (exclude-list dikonfigurasi manual).
 - Preprocessing teks Bahasa Indonesia lengkap (cleaning, normalizing, case folding, tokenizing, filtering, stemming) mengikuti urutan yang sudah disepakati di diskusi sebelumnya.
-- Klasifikasi sentimen **hybrid**: lexicon-based sebagai pass pertama, eskalasi ke LLM untuk komentar yang ambigu/confidence rendah.
+- Klasifikasi sentimen **hybrid**: model klasifikasi lokal (revisi 0.6, gantiin rencana lexicon awal — lihat `Architecture.md` ADR-02) sebagai pass pertama, eskalasi ke LLM untuk komentar yang confidence-nya rendah.
 - Ekstraksi top keyword/messaging berbasis TF-IDF, dipecah per label sentimen (top keyword khusus komentar negatif vs positif vs netral).
 - Output analisis dalam format JSON terstruktur sebagai kontrak resmi ke Modul Laporan.
 - Generator laporan HTML statis single-file dari output JSON tersebut.
@@ -56,7 +56,7 @@ Dua kebutuhan ini (hitung sentimen, susun laporan) sengaja dipisah jadi dua alat
 | FR-01 | Ingest & Flatten | Baca `comments.json`, ratakan struktur nested (video→comment→reply) jadi satu daftar komentar datar dengan metadata asal (video_id, is_reply, parent_comment_id) | Analis | Wajib |
 | FR-02 | Exclude Akun Internal | Buang komentar dari akun yang ada di exclude-list config sebelum tahap analisis lain berjalan | Analis | Wajib |
 | FR-03 | Preprocessing Teks | Jalankan pipeline: ekstraksi emoji → case folding → cleaning → normalizing → tokenizing → filtering stopword → stemming | Analis | Wajib |
-| FR-04 | Klasifikasi Sentimen Hybrid | Pass 1 lexicon; komentar dengan skor ambigu/confidence rendah dieskalasi ke LLM. Hasil: label + confidence + metode yang dipakai | Analis | Wajib |
+| FR-04 | Klasifikasi Sentimen Hybrid | Pass 1 model sentimen lokal (`mdhugol/indonesia-bert-sentiment-classification`); komentar dengan confidence rendah dieskalasi ke LLM. Hasil: label + confidence + metode yang dipakai | Analis | Wajib |
 | FR-05 | Ekstraksi Top Keyword/Messaging | TF-IDF unigram+bigram dari token hasil stemming, top-N keseluruhan dan top-N per label sentimen | Analis | Wajib |
 | FR-06 | Serialisasi Hasil Analisis | Simpan seluruh hasil (per-komentar, agregat, top keyword, metadata run) ke satu file JSON sesuai `Schema.md` | Analis | Wajib |
 | FR-07 | Generate Laporan HTML | Baca file JSON hasil analisis, susun laporan HTML statis satu file (ringkasan, distribusi sentimen, top keyword, contoh komentar representatif) | Analis | Wajib |
@@ -83,8 +83,8 @@ Dua kebutuhan ini (hitung sentimen, susun laporan) sengaja dipisah jadi dua alat
 - **Deteksi typo (sesi /plan-eng-review, critical gap):** kalau `video_author_username` diisi TAPI tidak ada satupun comment/reply di video itu yang usernamenya match, log `WARNING` (bukan error, run tetap lanjut) — sinyal kemungkinan typo di kolom CSV atau format salah (uploader yang memang tidak pernah berkomentar sendiri juga valid, warning ini cuma sinyal untuk dicek manual, bukan berarti pasti salah).
 
 **FR-04 — Klasifikasi Sentimen Hybrid**
-- Diberikan komentar dengan skor lexicon yang jelas (di luar zona ambigu), ketika diklasifikasi, maka label diambil dari lexicon tanpa memanggil LLM, dan field `sentiment_method` = `"lexicon"`.
-- Diberikan komentar dengan skor lexicon ambigu atau banyak token tidak dikenali kamus, ketika diklasifikasi, maka komentar dikirim ke LLM dan `sentiment_method` = `"llm"`.
+- Diberikan komentar dengan confidence model di atas `ambiguous_confidence_threshold` (config, wajib dikalibrasi - lihat `Architecture.md` ADR-02), ketika diklasifikasi, maka label diambil dari model tanpa memanggil LLM, dan field `sentiment_method` = `"model"`.
+- Diberikan komentar dengan confidence model di bawah threshold itu, ketika diklasifikasi, maka komentar dikirim ke LLM dan `sentiment_method` = `"llm"`.
 - Kasus gagal: ketika panggilan API LLM gagal (timeout/error), maka komentar tersebut ditandai `sentiment_label` = `"tidak_terklasifikasi"` (bukan membuat seluruh run gagal), dan dicatat di log beserta jumlah kegagalan di akhir run.
 
 **FR-07 — Generate Laporan HTML**

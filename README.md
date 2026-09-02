@@ -328,6 +328,94 @@ There is no proxy support and none is planned: the point of this tool is to
 cost nothing to run. If TikTok rate-limits the machine, the run stops with exit
 code `2` and the checkpoint intact. Wait a few hours and rerun the same command.
 
+## Sentiment analysis (`sosmed_sentiment/`)
+
+Two more CLIs on top of the same scraped data: `analyze` classifies each
+comment's sentiment and pulls top keywords, `generate_report` turns that into
+one offline HTML file.
+
+### Install
+
+Same `requirements.txt`, same venv - `pip install -r requirements.txt` also
+installs `torch` and `transformers` for this part. That adds **~600MB** to the
+venv (torch ~120MB CPU-only + the sentiment model's ~500MB weights, downloaded
+once on first run - see below), a deliberate departure from this repo's
+"stay light" convention. See `docs/Architecture.md` ADR-02 for why.
+
+### First run downloads the model
+
+The first `analyze` run on a machine logs a line like:
+
+```
+memuat model sentimen lokal (mdhugol/indonesia-bert-sentiment-classification)...
+unduhan pertama kali ~500MB, sekali per mesin, butuh internet - proses
+berikutnya pakai cache lokal.
+```
+
+That download takes a few minutes depending on your connection and needs
+internet access (blocked by some office proxies/firewalls - `huggingface.co`
+needs to be reachable). Every run after the first loads from the local
+HuggingFace cache in a couple of seconds. If the load fails, `analyze` exits
+with code `2` and an actionable message - no comment is processed yet at that
+point, so rerunning once the connection issue is fixed picks up cleanly.
+
+### Running it
+
+```sh
+# .env: copy .env.example, fill in LLM_API_KEY/LLM_BASE_URL/LLM_MODEL if you
+# want ambiguous comments escalated to an LLM (optional - without it, the
+# local model's own label is used as-is for everything)
+
+# --month is shorthand for --input runs/<month>/comments.json and
+# --output runs/<month>/analysis_result.json
+python -m sosmed_sentiment.cli.analyze \
+  --month 2026-08 \
+  --threshold-config config/thresholds.yaml   # required only with LLM env vars set
+
+python -m sosmed_sentiment.cli.generate_report \
+  --input runs/2026-08/analysis_result.json \
+  --output runs/2026-08/report.html
+```
+
+A quick fixture to try the CLI against without real scraped data:
+`docs/examples/comments.sample.json` (9 synthetic comments, matches the real
+input schema).
+
+### Resuming an interrupted run
+
+`analyze` writes `.analyze-partial.jsonl` next to `--output` as it goes -
+preprocessing + classification on ~6,000 comments takes ~20-25 minutes
+(stemming + model inference), long enough that a killed process or a
+background job hitting a shell timeout shouldn't mean starting over. Rerun
+the exact same command and already-processed comments are skipped. Pass
+`--fresh` to ignore the checkpoint and reclassify everything.
+
+### Calibrating the escalation threshold
+
+`config/thresholds.yaml` is checked in with a value already calibrated against
+this repo's own 200-comment labeled sample - see the comments in that file for
+the full sweep and reasoning. To recalibrate against a new labeled sample (a
+different product line, a different model), label 200 comments the same way:
+
+```sh
+python scripts/generate_labeling_sample.py   # writes local/labeling_sample.xlsx
+# ... fill in the sentiment_label column, save as
+# local/labeling_sample_labeled.xlsx (see docs/calibration/codebook.md for
+# label definitions) ...
+python scripts/calibrate_threshold.py
+```
+
+`local/` is gitignored on purpose - it holds real customer comment text and
+is never committed (see the note in `.gitignore`). `calibrate_threshold.py`
+mirrors just `comment_id`+`sentiment_label`+`notes` (no comment text or
+username) to `config/calibration/tahap-b-labels.csv`, which IS committed -
+that's the reproducible, privacy-safe half of the labeling work.
+
+There is deliberately no threshold baked into the code itself - two earlier
+assumptions in this project (a stemming cache that didn't exist, an "LLM is
+expensive" estimate that was never priced) turned out wrong once measured, so
+this one is never guessed.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).

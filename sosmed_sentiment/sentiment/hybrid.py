@@ -1,12 +1,10 @@
 from typing import Any, Dict, List, Optional
 
-from sosmed_sentiment.errors import LLMCallError
-from sosmed_sentiment.sentiment.lexicon_classifier import classify as lexicon_classify
-from sosmed_sentiment.sentiment.lexicon_classifier import score_tokens
-from sosmed_sentiment.sentiment.llm_classifier import classify_via_llm
+from loguru import logger
 
-DEFAULT_AMBIGUOUS_THRESHOLD_SCORE: float = 0.15
-DEFAULT_AMBIGUOUS_THRESHOLD_OOV_RATIO: float = 0.5
+from sosmed_sentiment.errors import LLMCallError, ModelClassifyError
+from sosmed_sentiment.sentiment.llm_classifier import classify_via_llm
+from sosmed_sentiment.sentiment.model_classifier import classify as model_classify
 
 # Architecture.md §8: past this failure ratio among escalated comments, exit
 # 3 so the analyst notices a systemic problem rather than random noise.
@@ -14,40 +12,45 @@ LLM_FAILURE_EXIT_THRESHOLD: float = 0.10
 
 
 def is_ambiguous(
-    score: float,
-    oov_ratio: float,
-    threshold_score: float = DEFAULT_AMBIGUOUS_THRESHOLD_SCORE,
-    threshold_oov: float = DEFAULT_AMBIGUOUS_THRESHOLD_OOV_RATIO
+    confidence: float,
+    threshold: float
 ) -> bool:
-    """Architecture.md ADR-02 escalation rule: score in the neutral band, or too OOV."""
-    return abs(score) <= threshold_score or oov_ratio > threshold_oov
+    """docs/designs/sentiment-model-cascade.md Feasibility Note: a classifier model
+    returns one confidence value, not a signed score + OOV ratio - the two-signal
+    lexicon gate this replaced does not apply. Below threshold -> escalate to LLM.
+    """
+    return confidence < threshold
 
 
 def classify_comment(
-    tokens: List[str],
     text_raw: str,
-    lexicon: Dict[str, float],
-    model: str,
+    llm_model: str,
+    threshold_confidence: float,
     base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
-    threshold_score: float = DEFAULT_AMBIGUOUS_THRESHOLD_SCORE,
-    threshold_oov: float = DEFAULT_AMBIGUOUS_THRESHOLD_OOV_RATIO
+    api_key: Optional[str] = None
 ) -> Dict[str, Any]:
-    """One comment through the hybrid decision (Architecture.md ADR-02).
+    """One comment through the model->LLM cascade (design doc Approach C).
 
-    A clear lexicon score never calls the LLM at all - cost control is a
-    branch that's never taken, not a check that runs and is overridden.
+    The local model is the cheap first pass; low-confidence results escalate
+    to the LLM. A model failure on one comment (ModelClassifyError) also
+    escalates rather than aborting the batch - the LLM layer already has to
+    handle isolation for its own failures, so a model failure just means
+    "treat as maximally ambiguous" instead of adding a second failure path.
     A failed LLM call becomes tidak_terklasifikasi/llm_failed, not an
     exception that reaches the caller - Rules.md §2: one comment's failure
     never stops the batch.
     """
-    score, oov_ratio = score_tokens(tokens, lexicon)
+    try:
+        result: Optional[Dict[str, Any]] = model_classify(text_raw)
+    except ModelClassifyError as error:
+        logger.warning('model classify gagal untuk satu komentar, eskalasi ke LLM: %s' % error)
+        result = None
 
-    if not is_ambiguous(score, oov_ratio, threshold_score, threshold_oov):
-        return lexicon_classify(tokens, lexicon, neutral_band=threshold_score)
+    if result is not None and not is_ambiguous(result['sentiment_confidence'], threshold_confidence):
+        return result
 
     try:
-        return classify_via_llm(text_raw, model=model, base_url=base_url, api_key=api_key)
+        return classify_via_llm(text_raw, model=llm_model, base_url=base_url, api_key=api_key)
     except LLMCallError:
         return {
             'sentiment_label': 'tidak_terklasifikasi',
@@ -61,9 +64,8 @@ def llm_failure_ratio_exceeds_threshold(
 ) -> bool:
     """Architecture.md §8: ratio of llm_failed among ESCALATED comments, not all comments.
 
-    A batch that never escalates anything (100% lexicon) cannot trip this -
-    the ratio is only meaningful relative to what was actually sent to the
-    LLM.
+    A batch that never escalates anything cannot trip this - the ratio is
+    only meaningful relative to what was actually sent to the LLM.
     """
     escalated: int = sum(
         1 for c in comments if c['sentiment_method'] in ('llm', 'llm_failed')

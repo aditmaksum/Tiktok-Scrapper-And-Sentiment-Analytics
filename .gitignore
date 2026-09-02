@@ -161,6 +161,12 @@ cython_debug/
 # Scraped output and run checkpoints
 runs/
 
+# Full labeling artifacts (raw customer comment text) - never committed.
+# Separate from runs/ on purpose: runs/<month> gets overwritten by the next
+# scrape, and manual labeling work (1-2 hours) must survive that. Only the
+# id+label answer key derived from this (config/calibration/) is tracked.
+local/
+
 # Browser session reused by the Playwright fallback (phase 2)
 .tiktok-session.json
 

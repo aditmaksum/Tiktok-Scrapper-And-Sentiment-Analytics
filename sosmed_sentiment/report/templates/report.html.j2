@@ -76,6 +76,73 @@
     text-align: center;
     color: var(--color-text-muted);
   }
+  .section {
+    background: var(--color-surface);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    padding: 20px 24px;
+    margin-top: 16px;
+  }
+  .tier-section { margin-top: 56px; }
+  .tier-section > h2 {
+    margin-top: 0;
+    font-size: 22px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .tier-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 2px 10px;
+  }
+  .stacked-bar {
+    display: flex;
+    height: 20px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--color-border);
+  }
+  .stacked-bar .seg.positif { background: var(--color-positif); }
+  .stacked-bar .seg.negatif { background: var(--color-negatif); }
+  .stacked-bar .seg.netral { background: var(--color-netral); }
+  .stacked-bar .seg.reply { background: var(--color-accent); }
+  .stacked-bar .seg.comment { background: var(--color-positif); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--color-text-muted); }
+  .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  .legend .dot.positif { background: var(--color-positif); }
+  .legend .dot.negatif { background: var(--color-negatif); }
+  .legend .dot.netral { background: var(--color-netral); }
+  .legend .dot.comment { background: var(--color-positif); }
+  .legend .dot.reply { background: var(--color-accent); }
+  .tier-row { margin: 14px 0; }
+  .tier-row .tier-row-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+  .tier-row .tier-row-label .name { font-weight: 600; }
+  .tier-row .tier-row-label .n { color: var(--color-text-muted); }
+  .mini-cards { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 4px; }
+  .mini-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    min-width: 130px;
+  }
+  .mini-card .number { font-size: 22px; font-weight: 700; }
+  .mini-card .label { font-size: 11px; color: var(--color-text-muted); }
+  .theme-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .theme-chip {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+  .theme-chip .n { color: var(--color-text-muted); }
+  h3 { font-size: 14px; margin-bottom: 4px; }
   @media (max-width: 600px) {
     body { padding: 12px; }
     .card .number { font-size: 24px; }
@@ -99,8 +166,20 @@
 
   <div class="cards">
     <div class="card">
+      <div class="number">{{ total_videos }}</div>
+      <div class="label">Video</div>
+    </div>
+    <div class="card">
       <div class="number">{{ total_comments_analyzed }}</div>
       <div class="label">Komentar dianalisis</div>
+    </div>
+    <div class="card">
+      <div class="number">{{ overall_summary.comment_vs_reply.comment }}</div>
+      <div class="label">Komentar utama</div>
+    </div>
+    <div class="card">
+      <div class="number">{{ overall_summary.comment_vs_reply.reply }}</div>
+      <div class="label">Reply</div>
     </div>
     <div class="card">
       <div class="number">{{ total_comments_excluded_internal }}</div>
@@ -112,7 +191,53 @@
     </div>
   </div>
 
-  <h2>Distribusi Sentimen</h2>
+  {% if overall_summary.by_tier %}
+  <h2>Ringkasan per Account Type</h2>
+  <div class="section">
+    <table>
+      <tr><th>Account Type</th><th>Video</th><th>Komentar</th></tr>
+      {% for tier in overall_summary.by_tier %}
+      <tr><td>{{ tier.label }}</td><td>{{ tier.video_count }}</td><td>{{ tier.comment_count }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <h2>Distribusi Komentar vs Reply</h2>
+  <div class="section">
+    <div class="stacked-bar">
+      <div class="seg comment" style="width: {{ overall_summary.comment_vs_reply.comment_pct }}%"></div>
+      <div class="seg reply" style="width: {{ overall_summary.comment_vs_reply.reply_pct }}%"></div>
+    </div>
+    <div class="legend">
+      <span><span class="dot comment"></span>Komentar utama {{ overall_summary.comment_vs_reply.comment }} ({{ overall_summary.comment_vs_reply.comment_pct }}%)</span>
+      <span><span class="dot reply"></span>Reply {{ overall_summary.comment_vs_reply.reply }} ({{ overall_summary.comment_vs_reply.reply_pct }}%)</span>
+    </div>
+  </div>
+
+  <h2>Distribusi Sentimen per Account Type</h2>
+  <div class="section">
+    {% for tier in tier_breakdown %}
+    <div class="tier-row">
+      <div class="tier-row-label">
+        <span class="name">{{ tier.label }}</span>
+        <span class="n">{{ tier.total_count }} komentar+reply</span>
+      </div>
+      <div class="stacked-bar">
+        <div class="seg positif" style="width: {{ tier.sentiment_summary.positif_pct }}%"></div>
+        <div class="seg negatif" style="width: {{ tier.sentiment_summary.negatif_pct }}%"></div>
+        <div class="seg netral" style="width: {{ tier.sentiment_summary.netral_pct }}%"></div>
+      </div>
+    </div>
+    {% endfor %}
+    <div class="legend">
+      <span><span class="dot positif"></span>Positif</span>
+      <span><span class="dot negatif"></span>Negatif</span>
+      <span><span class="dot netral"></span>Netral</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <h2>Distribusi Sentimen (Keseluruhan)</h2>
   <div class="bar-row">
     <div class="bar-label">Positif</div>
     <div class="bar-track"><div class="bar-fill positif" style="width: {{ sentiment_summary.positif_pct }}%"></div></div>
@@ -174,6 +299,99 @@
       <div>{{ quote.text_raw }}</div>
     </div>
     {% endfor %}
+  {% endfor %}
+
+  {% for tier in tier_breakdown %}
+  <div class="tier-section">
+    <h2>{{ tier.label }} <span class="tier-badge">{{ tier.video_count }} video</span></h2>
+
+    <div class="mini-cards">
+      <div class="mini-card">
+        <div class="number">{{ tier.total_count }}</div>
+        <div class="label">Total komentar + reply</div>
+      </div>
+      <div class="mini-card">
+        <div class="number">{{ tier.comment_count }}</div>
+        <div class="label">Komentar utama</div>
+      </div>
+      <div class="mini-card">
+        <div class="number">{{ tier.reply_count }}</div>
+        <div class="label">Reply</div>
+      </div>
+      <div class="mini-card">
+        <div class="number">{{ tier.meaningful_count }} ({{ tier.meaningful_pct }}%)</div>
+        <div class="label">Bermakna</div>
+      </div>
+      <div class="mini-card">
+        <div class="number">{{ tier.noise_count }} ({{ tier.noise_pct }}%)</div>
+        <div class="label">Reaksi / noise</div>
+      </div>
+    </div>
+
+    <h3>Sentimen</h3>
+    <div class="bar-row">
+      <div class="bar-label">Positif</div>
+      <div class="bar-track"><div class="bar-fill positif" style="width: {{ tier.sentiment_summary.positif_pct }}%"></div></div>
+      <div class="bar-value">{{ tier.sentiment_summary.positif }} ({{ tier.sentiment_summary.positif_pct }}%)</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Negatif</div>
+      <div class="bar-track"><div class="bar-fill negatif" style="width: {{ tier.sentiment_summary.negatif_pct }}%"></div></div>
+      <div class="bar-value">{{ tier.sentiment_summary.negatif }} ({{ tier.sentiment_summary.negatif_pct }}%)</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Netral</div>
+      <div class="bar-track"><div class="bar-fill netral" style="width: {{ tier.sentiment_summary.netral_pct }}%"></div></div>
+      <div class="bar-value">{{ tier.sentiment_summary.netral }} ({{ tier.sentiment_summary.netral_pct }}%)</div>
+    </div>
+
+    <h3>Keyword Dominan per Sentimen</h3>
+    <div class="keyword-columns">
+      <div>
+        <h4>Positif</h4>
+        <table>
+          {% for item in tier.top_keywords_by_sentiment.get('positif', []) %}
+          <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+      <div>
+        <h4>Negatif</h4>
+        <table>
+          {% for item in tier.top_keywords_by_sentiment.get('negatif', []) %}
+          <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+      <div>
+        <h4>Netral</h4>
+        <table>
+          {% for item in tier.top_keywords_by_sentiment.get('netral', []) %}
+          <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+
+    <h3>Kata yang Sering Muncul</h3>
+    <table>
+      <tr><th>Kata</th><th>Jumlah</th></tr>
+      {% for item in tier.top_words %}
+      <tr><td>{{ item.keyword }}</td><td>{{ item.count }}</td></tr>
+      {% endfor %}
+    </table>
+
+    <h3>Tema Dominan</h3>
+    {% if tier.top_themes %}
+    <div class="theme-chips">
+      {% for item in tier.top_themes %}
+      <span class="theme-chip">{{ item.theme }} <span class="n">&times;{{ item.count }}</span></span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">Belum ada tema yang cukup sering berulang di tier ini.</div>
+    {% endif %}
+  </div>
   {% endfor %}
 
   {% if excluded_accounts_detected %}
