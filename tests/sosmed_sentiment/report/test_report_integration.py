@@ -279,3 +279,28 @@ def test_real_dataset_explorer_is_server_rendered_and_capped():
     assert 1 <= row_count <= 150
     assert 'aria-pressed' in html
     assert '<button' in html
+
+
+def test_narrative_body_with_html_metacharacters_renders_escaped_t19():
+    """Decision #25/T19 (Eng phase): verifies, and guards against a future
+    regression of, html_builder.py:493's select_autoescape(['html', 'j2']) -
+    a narrative body (LLM-sourced or the deterministic fallback, this test
+    doesn't care which) containing HTML metacharacters must render escaped
+    in report.html, never as a raw injected tag. This is the first place
+    LLM-authored text reaches this render path (docs/plans/2026-09-04-llm-
+    narrative-citation-guardrail.md), so this is worth a dedicated
+    regression test rather than relying on the template never changing."""
+    data = _small_synthetic_result()
+    malicious_narrative = {
+        'headline': [{
+            'title': '<script>alert(1)</script>',
+            'body': 'Angka <b>berbahaya</b> & "kutip" <script>alert(1)</script>'
+        }],
+        'risk': [{'title': 'risk', 'body': 'risk body'}],
+        'actions': [{'title': 'action', 'body': 'action body'}]
+    }
+
+    html = build_report(data, narrative_override=malicious_narrative)
+
+    assert '<script>alert(1)</script>' not in html
+    assert '&lt;script&gt;' in html

@@ -105,3 +105,52 @@ and consciously left out of that plan's scope.
   review under see-something-say-something. Has already misled two review
   sessions (see the `architecture-doc-wrong-about-own-code` learning).
   Effort: S -> S.
+
+## sosmed_sentiment — LLM narrative layer (deferred from 2026-09-04 /autoplan)
+
+Deferred from the CEO / Design (skipped, no UI scope) / Eng / DX
+`/autoplan` review of
+`docs/plans/2026-09-04-llm-narrative-citation-guardrail.md`. Everything
+inside that plan's own blast radius and under a day of effort was folded
+directly into the plan's scope (Decisions #1-#26, tasks T1-T20) rather than
+deferred here — these two items are the only findings across all three
+review phases that were genuinely judged to sit outside that plan's blast
+radius.
+
+- **`[inferensi]` structural HTML tagging for interpretive/causal narrative
+  sentences.** P2. CEO phase, 0C-bis Approach C. What: extend the narrative
+  JSON schema (`{"body": "...", "inference": true}` or similar) and
+  `report.html.j2` to visually mark interpretive/causal sentences distinctly
+  from purely descriptive ones, on top of the citation guardrail's
+  causal-connector allowlist (Decision #1, shipping with the parent plan).
+  Why: the connector allowlist already fails closed and prevents outright
+  causal fabrication, but it doesn't make a legitimately-supported inference
+  visually distinguishable from a plain description — the strongest
+  long-term reader-trust fix identified across all three review phases.
+  Pros: most transparent to the end reader; directly closes the remaining
+  half of S-5 (master plan, `docs/plans/2026-09-02-insight-driven-report.md`,
+  rated CRITICAL twice before this plan). Cons: the only piece of this
+  feature area needing a `report.html.j2` template/CSS change — couples to
+  Layer 4 rendering unnecessarily if done now, which is why it was kept out
+  of the parent plan's scope rather than folded in. Depends on: the parent
+  plan shipping first (needs the JSON schema Decision #1 establishes as a
+  base). Effort: M (human ~1-2 days / CC ~1-2h).
+
+- **Narrative quality scoring against the D1 ground-truth sample.** P3. CEO
+  phase. What: once the 500-sample labeled set (D1 — `local/
+  labeling_sample_labeled.xlsx` + `local/labeling_sample_batch2_labeled.xlsx`,
+  already labeled by the user, comparison tooling tracked as a separate
+  ticket per the parent plan's §8) exists and is wired into
+  `compare_models.py`, extend that same tooling (or a sibling script) to
+  periodically sample LLM-generated narrative outputs and score them against
+  ground truth the same way BERT-vs-LLM sentiment-classification accuracy is
+  scored today. Why: right now narrative "quality" is measured only by the
+  citation guardrail's pass/fail count and the human spot-check sidecar
+  (`narrative_review.json`, Decision #3) — neither is an actual accuracy
+  metric against a labeled reference. This closes that gap and mirrors the
+  BERT/LLM divergence measurement already tracked above (the P1
+  "engine reconciliation" item in this file). Pros: turns "does the
+  guardrail catch things" into "is the narrative actually good." Cons:
+  depends entirely on D1 landing first — genuinely a separate, larger piece
+  of work, unestimated precisely pending that decision. Effort: L (human) /
+  M (CC), unestimated pending D1. Depends on: D1.

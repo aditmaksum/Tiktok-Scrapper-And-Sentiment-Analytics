@@ -74,6 +74,53 @@ python -m sosmed_sentiment.cli.generate_report --input runs/2026-08/analysis_res
 
 Buka `runs/2026-08/report.html` langsung di browser (dobel klik, gak perlu server).
 
+### 3a. Narasi LLM + spot-check manusia (`--narrative-review`)
+
+Kalau `.env` LLM diisi (`LLM_API_KEY`/`LLM_MODEL`/`LLM_BASE_URL`, sama kayak
+punya `analyze`), `generate_report` juga minta LLM nulis narasi headline/
+risk/actions laporan - divalidasi guardrail sitasi (tiap angka yang disebut
+LLM harus cocok ke angka yang bener-bener ada di metrics laporan itu
+sendiri) sebelum boleh masuk laporan. Kalau ditolak guardrail 2x, atau LLM
+gak dikonfigurasi, laporan otomatis balik ke narasi deterministik (yang
+lama, non-LLM) - bagian narasi TIDAK PERNAH kosong.
+
+**Cara spot-check:**
+
+```sh
+python -m sosmed_sentiment.cli.generate_report \
+  --input runs/2026-08/analysis_result.json \
+  --output runs/2026-08/report.html \
+  --narrative-review
+```
+
+Ini nyetak semua kalimat narasi (headline/risk/actions) ke terminal SETELAH
+`report.html` ditulis, plus angka metrics pembanding di sebelahnya - cocokin
+tiap angka yang disebut ke tabel yang sudah ada di laporan yang sama. Baris
+pertama outputnya selalu banner sumber narasi: `llm-accepted` (LLM lolos
+guardrail), `llm-retried-then-fallback` (LLM ditolak 2x, dipakai narasi
+deterministik), `no-llm-configured` (`.env` LLM kosong), atau
+`narrative-disabled` (dipanggil bareng `--no-narrative`).
+
+**Kapan pakai `--narrative-review`:** pakai di **SETIAP run selama 2 minggu
+pertama** sistem narasi LLM ini jalan (masa membangun kepercayaan) - setelah
+itu boleh dikurangi jadi **sampling ~1 dari 5 run**, asal belum ada tanda
+guardrail sering nolak/salah. Bukan gate blocking - laporan tetap
+ter-generate dan tersimpan walau operator gak sempat spot-check, ini cuma
+sinyal kualitas tambahan.
+
+**Flag lain terkait narasi:**
+
+| Flag | Fungsi |
+|---|---|
+| `--no-narrative` | Skip panggilan LLM narasi sama sekali (laporan pakai narasi deterministik), independen dari eskalasi LLM sentimen di `analyze` - dua keputusan on/off yang beda, walau sama-sama pakai `.env` LLM |
+| `--fresh-narrative` | Buang cache `narrative.json`, paksa generate ulang dari LLM (sama pola penamaan dengan `--fresh` di `analyze`) |
+
+Dua file sidecar ikut tersimpan di sebelah `report.html`: `narrative.json`
+(cache narasi LLM terakhir yang lolos guardrail, dipakai lagi otomatis kalau
+metrics-nya sama) dan `narrative_review.json` (jejak audit: kapan generate,
+sumbernya LLM apa fallback, dan kapan/siapa yang terakhir spot-check lewat
+`--narrative-review`).
+
 ## 4. Kalibrasi ulang threshold (jarang, cuma kalau mau)
 
 Cuma perlu kalau ganti model, atau mau kalibrasi ulang pakai data lebih baru.

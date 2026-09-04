@@ -443,7 +443,8 @@ def build_report(
     template_dir: str = TEMPLATE_DIR,
     template_name: str = 'report.html.j2',
     account_type_map: Optional[Dict[str, str]] = None,
-    total_population_videos: Optional[int] = None
+    total_population_videos: Optional[int] = None,
+    narrative_override: Optional[Dict[str, Any]] = None
 ) -> str:
     """analysis_result.json (already parsed) -> rendered HTML string.
 
@@ -463,6 +464,19 @@ def build_report(
     total_population_videos (FT-2): operator-supplied estimate of the
     account's total video count, threaded straight through to
     insights.build_metrics() for the demoted trend caveat. None by default.
+
+    narrative_override (docs/plans/2026-09-04-llm-narrative-citation-
+    guardrail.md, Eng phase Section 1 diagram): when given, replaces
+    metrics['narrative'] (insights.build_narrative()'s deterministic result)
+    BEFORE the template renders - the point where cli.generate_report.py's
+    llm_insights.generate_narrative_with_guardrail() result (LLM-accepted or
+    its own deterministic fallback) reaches the report. This ordering is
+    part of the contract: it must happen after build_metrics() computes the
+    deterministic narrative (so the fallback value below stays available)
+    and before template.render() reads metrics['narrative'] - a future edit
+    that reorders these two calls would silently ship a report whose
+    narrative was never LLM-attempted at all. None by default (unchanged
+    behavior: metrics['narrative'] stays build_narrative()'s own result).
     """
     _validate(data)
 
@@ -480,6 +494,8 @@ def build_report(
         total_videos = len({c['video_id'] for c in comments if c.get('video_id')})
 
     metrics: Dict[str, Any] = insights_mod.build_metrics(data, total_population_videos)
+    if narrative_override is not None:
+        metrics['narrative'] = narrative_override
     metrics['top_comments'] = _mask_top_comments(metrics['top_comments'])
     metrics['video_leaderboard'] = _attach_video_bars(metrics['video_leaderboard'])
     charts: Dict[str, Any] = _build_charts(metrics)

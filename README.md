@@ -374,12 +374,42 @@ python -m sosmed_sentiment.cli.analyze \
 
 python -m sosmed_sentiment.cli.generate_report \
   --input runs/2026-08/analysis_result.json \
-  --output runs/2026-08/report.html
+  --output runs/2026-08/report.html \
+  --narrative-review   # spot-check the LLM-written narrative before trusting it (see below)
 ```
 
 A quick fixture to try the CLI against without real scraped data:
 `docs/examples/comments.sample.json` (9 synthetic comments, matches the real
 input schema).
+
+### LLM narrative layer (`generate_report`)
+
+With `LLM_API_KEY`/`LLM_MODEL`/`LLM_BASE_URL` set (the same `.env` vars
+`analyze`'s LLM escalation already uses), `generate_report` also asks an LLM
+to write the report's headline/risk/actions narrative, validated by a
+citation guardrail (every numeric claim must bind to the correct number in
+the report's own metrics - see `docs/plans/2026-09-04-llm-narrative-
+citation-guardrail.md`) before it's allowed into the report. If the LLM
+narrative is rejected twice (or the LLM isn't configured at all), the report
+falls back to the deterministic narrative it always used before this layer
+existed - the narrative section is never left empty.
+
+- `--narrative-review` - after writing `report.html`, prints every narrative
+  sentence plus the metrics numbers it cites, for a human spot-check.
+  Recommended on **every run for the first 2 weeks**, then sampled
+  **~1-in-5 runs** once the guardrail's proven reliable (see
+  `docs/runbook.md`).
+- `--no-narrative` - skip the LLM narrative call entirely (report uses the
+  deterministic narrative), independent of `analyze`'s own LLM sentiment
+  escalation - useful if you trust the LLM for sentiment classification but
+  not yet for narrative prose.
+- `--fresh-narrative` - ignore `narrative.json`'s cache and force a fresh
+  LLM generation (same naming as `analyze`'s `--fresh`).
+
+Two sidecar files land next to `report.html`: `narrative.json` (a
+hash-keyed cache of the last guardrail-accepted narrative) and
+`narrative_review.json` (an audit trail of every generate - when, LLM vs.
+fallback, and whether/when a human spot-checked it).
 
 ### Resuming an interrupted run
 

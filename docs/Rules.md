@@ -31,7 +31,16 @@ Dua CLI Python 3.12 yang terpisah: `analyze` (ingest → exclude filter → prep
 | Konfigurasi | `config/` (root repo, bukan di dalam `sosmed_sentiment/`) | `exclude_accounts.yaml`, `thresholds.yaml`, `stopwords_custom.txt` |
 | Tes | `tests/` (root repo yang sudah ada, dipakai bareng test scraper) | mirror struktur `sosmed_sentiment/`, prefix `test_` |
 
-**Larangan tegas:** tidak boleh ada panggilan ke LLM API di luar `sentiment/llm_classifier.py`. Tidak boleh ada logika parsing/transformasi teks di file `cli/*.py`.
+**Larangan tegas:** LLM calls only from dedicated `*_llm.py` client modules; never from `cli/`, never inline in business logic. Tidak boleh ada logika parsing/transformasi teks di file `cli/*.py`.
+
+(Amended 2026-09-04 per `docs/plans/2026-09-04-llm-narrative-citation-guardrail.md`
+Decision #12 - the original wording named `sentiment/llm_classifier.py` as
+the only sanctioned LLM call site; `report/llm_insights.py` is a second,
+legitimately different concern - metrics-dict-in/narrative-JSON-out, not
+comment-in/label-out - so the rule now states the pattern it actually means
+to enforce: one auditable call site per concern, each living in its own
+`*_llm.py` module, never reached from `cli/` or inlined into business
+logic.)
 
 ## 4. Penamaan
 | Elemen | Konvensi | Contoh |

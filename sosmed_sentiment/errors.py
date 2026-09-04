@@ -38,3 +38,15 @@ class ModelClassifyError(PipelineError):
 
 class ReportBuildError(PipelineError):
     """The HTML report could not be assembled from a schema-valid JSON."""
+
+
+class NarrativeGuardrailError(PipelineError):
+    """The LLM narrative's JSON shape/citations failed the guardrail check.
+
+    Never fatal by itself - report/llm_insights.py catches this per the
+    retry-then-fallback state machine (docs/plans/2026-09-04-llm-narrative-
+    citation-guardrail.md, Decision #4/#7): retry generation once, then fall
+    back to insights.build_narrative()/_build_tier_narrative() for this run.
+    The narrative section is never left empty and this error never
+    propagates past llm_insights.py's own boundary.
+    """
