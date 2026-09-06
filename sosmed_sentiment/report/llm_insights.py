@@ -382,6 +382,52 @@ def _match_tolerance(value: float) -> float:
     return max(0.15, abs(value) * 0.001)
 
 
+_MONTH_TOKENS: Tuple[str, ...] = (
+    'jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'ags', 'sep',
+    'okt', 'nov', 'des'
+)
+
+
+def _is_incidental_number(raw: str, body: str, start: int) -> bool:
+    """True for a number that is prose furniture, not a data citation.
+
+    Found by running the shipped guardrail against a real LLM: it treated
+    EVERY digit in the prose as a citation, so an ordinary sentence like
+    "Fokus pada 1 tier dengan volume terbesar" was rejected because "1" is
+    not in the metrics dict - which rejected essentially every response the
+    model produced, making the whole narrative path unusable. Statistics in
+    this report are decimals, percentages, or counts well above ten; small
+    bare integers, years, and month-suffix numbers never are.
+
+    Deliberately narrow: anything with a decimal separator, a thousands
+    separator, or an explicit sign is ALWAYS validated, so a fabricated
+    figure like "4.077" or "+26.8" still fails the guardrail exactly as
+    before.
+    """
+    if raw[0] in '+-' or '.' in raw or ',' in raw:
+        return False
+
+    try:
+        value = int(raw)
+    except ValueError:
+        return False
+
+    # "3 tema teratas", "1 dari 5 run" - rhetorical counts, never metrics.
+    if abs(value) <= 10:
+        return True
+
+    # A year ("2026"), not a statistic.
+    if 1900 <= value <= 2099 and len(raw) == 4:
+        return True
+
+    # A month-suffixed year fragment ("Agu 26", "Jul 26").
+    prefix = body[max(0, start - 6):start].lower()
+    if any(month in prefix for month in _MONTH_TOKENS):
+        return True
+
+    return False
+
+
 def _bind_claim_numbers(body: str, payload: Dict[str, Any]) -> Optional[str]:
     """F1: every number cited in `body` must bind to the CORRECT entity's
     value, not just exist somewhere in the flat payload. Returns None if
@@ -396,6 +442,8 @@ def _bind_claim_numbers(body: str, payload: Dict[str, Any]) -> Optional[str]:
 
     for match in NUMBER_RE.finditer(body):
         raw = match.group(0)
+        if _is_incidental_number(raw, body, match.start()):
+            continue
         candidates = _parse_number_candidates(raw)
         if not candidates:
             continue

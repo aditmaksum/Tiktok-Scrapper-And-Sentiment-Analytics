@@ -153,6 +153,37 @@ def test_body_with_zero_numbers_and_no_causal_connector_passes():
     assert llm_insights._validate_claim(body, payload, set()) is None
 
 
+def test_incidental_small_integers_are_not_treated_as_citations():
+    """Regression: the shipped guardrail validated EVERY digit in the prose,
+    so an ordinary sentence carrying a rhetorical "1" or "3" was rejected
+    because those are not in the metrics dict - which rejected practically
+    every real LLM response and made the narrative path unusable. Small
+    bare integers are prose furniture, never report statistics."""
+    payload = llm_insights.build_payload(_metrics(), _tier_rows())
+    body = 'Prioritaskan 1 tier dengan volume terbesar, lalu tinjau 3 tema teratas.'
+    assert llm_insights._validate_claim(body, payload, set()) is None
+
+
+def test_incidental_year_and_month_suffix_are_not_treated_as_citations():
+    payload = llm_insights.build_payload(_metrics(), _tier_rows())
+    body = 'Periode data adalah Agu 26 pada tahun 2026 untuk seluruh laporan.'
+    assert llm_insights._validate_claim(body, payload, set()) is None
+
+
+def test_signed_or_decimal_numbers_are_still_validated_after_the_incidental_rule():
+    """The incidental-number escape must stay narrow: anything with a sign,
+    a decimal point, or a thousands separator is still a citation and still
+    fails when it is not in the metrics dict (the real fabrication observed
+    in production was "4.077", which must keep failing)."""
+    payload = llm_insights.build_payload(_metrics(), _tier_rows())
+    for body in (
+        'Terdapat 4.077 komentar yang diproses oleh model lokal.',
+        'Net sentimen keseluruhan naik ke +9.0 bulan ini.'
+    ):
+        reason = llm_insights._validate_claim(body, payload, set())
+        assert reason is not None, body
+
+
 def test_numeric_membership_but_wrong_entity_is_rejected_f1():
     """F1: a number that IS somewhere in the payload (affiliate's 26.8) but
     attributed to a different tier (KOL) in the claim must be rejected -
